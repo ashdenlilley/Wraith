@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Wraith.Analytics/Wraith.Analytics.csproj" />
+    <Project Path="src/Wraith.Api/Wraith.Api.csproj" />
+    <Project Path="src/Wraith.App/Wraith.App.csproj" />
+    <Project Path="src/Wraith.Core/Wraith.Core.csproj" />
+    <Project Path="src/Wraith.Hardware/Wraith.Hardware.csproj" />
+    <Project Path="src/Wraith.Inference/Wraith.Inference.csproj" />
+    <Project Path="src/Wraith.Models/Wraith.Models.csproj" />
+    <Project Path="src/Wraith.Runtime/Wraith.Runtime.csproj" />
+    <Project Path="src/Wraith.Security/Wraith.Security.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Wraith.Tests/Wraith.Tests.csproj" />
+  </Folder>
+</Solution>

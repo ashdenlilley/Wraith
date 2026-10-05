@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
+    <PackageReference Include="xunit" Version="2.*" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.*" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Wraith.Core\Wraith.Core.csproj" />
+    <ProjectReference Include="..\..\src\Wraith.Models\Wraith.Models.csproj" />
+    <ProjectReference Include="..\..\src\Wraith.Inference\Wraith.Inference.csproj" />
+    <ProjectReference Include="..\..\src\Wraith.Runtime\Wraith.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\Wraith.Analytics\Wraith.Analytics.csproj" />
+    <ProjectReference Include="..\..\src\Wraith.Api\Wraith.Api.csproj" />
+    <ProjectReference Include="..\..\src\Wraith.Security\Wraith.Security.csproj" />
+    <ProjectReference Include="..\..\src\Wraith.App\Wraith.App.csproj" />
+  </ItemGroup>
+</Project>

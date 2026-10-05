@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <AssemblyName>Wraith</AssemblyName>
+    <RootNamespace>Wraith.App</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>wraith.ico</ApplicationIcon>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
+    <PublishSingleFile>true</PublishSingleFile>
+    <IncludeNativeLibrariesForSelfExtract>true</IncludeNativeLibrariesForSelfExtract>
+    <EnableCompressionInSingleFile>true</EnableCompressionInSingleFile>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="wraith.ico" />
+  </ItemGroup>
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <ProjectReference Include="..\Wraith.Core\Wraith.Core.csproj" />
+    <ProjectReference Include="..\Wraith.Hardware\Wraith.Hardware.csproj" />
+    <ProjectReference Include="..\Wraith.Runtime\Wraith.Runtime.csproj" />
+    <ProjectReference Include="..\Wraith.Models\Wraith.Models.csproj" />
+    <ProjectReference Include="..\Wraith.Inference\Wraith.Inference.csproj" />
+    <ProjectReference Include="..\Wraith.Analytics\Wraith.Analytics.csproj" />
+    <ProjectReference Include="..\Wraith.Api\Wraith.Api.csproj" />
+    <ProjectReference Include="..\Wraith.Security\Wraith.Security.csproj" />
+  </ItemGroup>
+</Project>
