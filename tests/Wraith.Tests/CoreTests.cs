@@ -57,6 +57,14 @@ public class GgufTests
     }
 
     [Theory]
+    [InlineData("Qwen2.5 Coder 14B Instruct AWQ", "Qwen2.5 Coder 14B Instruct")]
+    [InlineData("Model-GPTQ-Int4", "Model-Int4")]
+    [InlineData("AWQ", "AWQ")]
+    [InlineData("Qwen2.5 Coder 14B", "Qwen2.5 Coder 14B")]
+    public void CleanNameStripsForeignFormats(string input, string expected) =>
+        Assert.Equal(expected, ModelLibrary.CleanName(input));
+
+    [Theory]
     [InlineData("Qwen2.5 Coder 14B", "Q5_K_M", "qwen2.5-coder-14b-q5km")]
     [InlineData("DeepSeek R1 14B Q4_K_M", "Q4_K_M", "deepseek-r1-14b-q4km")]
     [InlineData("", "Q8_0", "model-q80")]

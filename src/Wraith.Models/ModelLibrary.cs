@@ -98,7 +98,7 @@ public sealed partial class ModelLibrary
     {
         var fi = new FileInfo(path);
         var quant = meta.Quantization ?? QuantFromName(fi.Name);
-        var display = !string.IsNullOrWhiteSpace(meta.Name) ? meta.Name! : System.IO.Path.GetFileNameWithoutExtension(fi.Name);
+        var display = CleanName(!string.IsNullOrWhiteSpace(meta.Name) ? meta.Name! : System.IO.Path.GetFileNameWithoutExtension(fi.Name));
         var entry = new ModelEntry
         {
             DisplayName = display, Path = path, Managed = managed, Quantization = quant, SizeBytes = fi.Length,
@@ -182,6 +182,16 @@ public sealed partial class ModelLibrary
 
     public static string? QuantFromName(string fileName) =>
         QuantRegex().Match(fileName) is { Success: true } m ? m.Groups[1].Value.ToUpperInvariant() : null;
+
+    [GeneratedRegex(@"(?i)[\s_-]*(?<![a-z0-9])(AWQ|GPTQ)(?![a-z0-9])")]
+    private static partial Regex ForeignFormatRegex();
+
+    /// <summary>Drops AWQ/GPTQ tags that mislabel a GGUF (copied from the source repo's metadata).</summary>
+    public static string CleanName(string name)
+    {
+        var cleaned = ForeignFormatRegex().Replace(name, "").Trim();
+        return cleaned.Length == 0 ? name : cleaned;
+    }
 
     /// <summary>qwen2.5-coder-14b-q5km style slug.</summary>
     public static string MakeId(string display, string? quant, string fileName)
