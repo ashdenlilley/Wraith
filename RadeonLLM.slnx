@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/RadeonLLM.Analytics/RadeonLLM.Analytics.csproj" />
+    <Project Path="src/RadeonLLM.Api/RadeonLLM.Api.csproj" />
+    <Project Path="src/RadeonLLM.App/RadeonLLM.App.csproj" />
+    <Project Path="src/RadeonLLM.Core/RadeonLLM.Core.csproj" />
+    <Project Path="src/RadeonLLM.Hardware/RadeonLLM.Hardware.csproj" />
+    <Project Path="src/RadeonLLM.Inference/RadeonLLM.Inference.csproj" />
+    <Project Path="src/RadeonLLM.Models/RadeonLLM.Models.csproj" />
+    <Project Path="src/RadeonLLM.Runtime/RadeonLLM.Runtime.csproj" />
+    <Project Path="src/RadeonLLM.Security/RadeonLLM.Security.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/RadeonLLM.Tests/RadeonLLM.Tests.csproj" />
+  </Folder>
+</Solution>
