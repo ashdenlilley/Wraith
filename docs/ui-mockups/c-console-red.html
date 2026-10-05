@@ -2,13 +2,13 @@
 <title>Wraith</title><script src="mock.js"></script>
 <style>
 /* red = #FF3B30 softened 20% toward the background; white is reserved for values */
-:root{--bg:#0d0707;--fg:#CF3128;--hi:#FF3B30;--v:#F5F5F5;--m:#7a403c;--b:#3a1a17;--p:#140b0a;--ok:#F5F5F5}
+:root{--bg:#000000;--fg:#CF3128;--hi:#FF3B30;--v:#F5F5F5;--m:#7a403c;--b:#3a1a17;--p:#140b0a;--ok:#F5F5F5}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 Consolas,"Cascadia Mono",monospace;padding:18px;min-height:100vh}
 body:before{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,#0000 0 2px,#0002 2px 3px);pointer-events:none}
 .top{display:flex;gap:18px;align-items:center;border-bottom:1px solid var(--b);padding-bottom:10px;margin-bottom:14px;flex-wrap:wrap}
 .brand{color:var(--hi);font-weight:700;letter-spacing:3px;font-size:16px}.ver{color:var(--m)}
-.tab{cursor:pointer;color:var(--m);padding:2px 8px}.tab:hover{color:var(--fg)}.tab.on{color:var(--v);background:var(--hi);color:#0d0707;font-weight:700}
-.chip{margin-left:auto;border:1px solid var(--fg);padding:1px 10px}.chip.on{background:var(--fg);color:#0d0707}
+.tab{cursor:pointer;color:var(--m);padding:2px 8px}.tab:hover{color:var(--fg)}.tab.on{color:var(--v);background:var(--hi);color:#000000;font-weight:700}
+.chip{margin-left:auto;border:1px solid var(--fg);padding:1px 10px}.chip.on{background:var(--fg);color:#000000}
 section{display:none}section.on{display:block}
 .v{color:var(--v);font-weight:600}.m{color:var(--m)}.h{color:var(--hi)}.ok{color:var(--v)}
 .panel{border:1px solid var(--b);background:var(--p);padding:10px 14px;margin-bottom:12px;position:relative}
@@ -23,13 +23,13 @@ pre{margin:0;white-space:pre-wrap}
 table{width:100%;border-collapse:collapse}td,th{padding:5px 10px;border-bottom:1px solid var(--b);text-align:left}th{color:var(--m);font-weight:400;font-size:11px;letter-spacing:2px;text-transform:uppercase}
 tr.def td:first-child:before{content:"▸ ";color:var(--hi)}
 button{background:none;border:1px solid var(--fg);color:var(--fg);font:inherit;padding:3px 14px;cursor:pointer;margin-right:6px}
-button:hover{background:var(--hi);border-color:var(--hi);color:#0d0707}
-button.run{border-color:var(--hi);color:var(--v);font-weight:700;padding:8px 36px;letter-spacing:3px}button.run:hover{color:#0d0707}
-input,select{background:#0d0707;border:1px solid var(--b);color:var(--v);font:inherit;padding:4px 8px;outline:none}input:focus{border-color:var(--hi)}
+button:hover{background:var(--hi);border-color:var(--hi);color:#000000}
+button.run{border-color:var(--hi);color:var(--v);font-weight:700;padding:8px 36px;letter-spacing:3px}button.run:hover{color:#000000}
+input,select{background:#000000;border:1px solid var(--b);color:var(--v);font:inherit;padding:4px 8px;outline:none}input:focus{border-color:var(--hi)}
 .cur:after{content:"█";color:var(--hi);animation:bl 1s steps(2) infinite}@keyframes bl{50%{opacity:0}}
 .chat{height:300px;overflow:auto}.chat .u{color:var(--hi)}.chat .a{color:var(--fg)}.chat .tx{color:var(--v)}
 .keys{margin-top:16px;border-top:1px solid var(--b);padding-top:8px;color:var(--m);font-size:12px}.keys b{color:var(--fg)}
-::selection{background:var(--hi);color:#0d0707}
+::selection{background:var(--hi);color:#000000}
 </style></head><body>
 <div class="top"><span class="brand">WRAITH</span><span class="ver">v0.2</span><span id="tabs"></span><span class="chip" id="chip">● STOPPED</span><span class="m" id="clock"></span></div>
 

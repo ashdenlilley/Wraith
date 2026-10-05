@@ -30,8 +30,23 @@ public partial class MainWindow : Window
     RuntimeRelease? _pendingUpdate;
     bool _loading = true, _busy, _keyVisible;
 
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
+
+    /// <summary>Pure black title bar and border so the window frame matches the app background (Windows 11).</summary>
+    void BlackFrame()
+    {
+        var h = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        int dark = 1, black = 0x000000, red = 0x2830CF; // COLORREF is 0x00BBGGRR: CF3128
+        DwmSetWindowAttribute(h, 20, ref dark, 4);   // immersive dark mode
+        DwmSetWindowAttribute(h, 35, ref black, 4);  // caption color
+        DwmSetWindowAttribute(h, 34, ref black, 4);  // border color
+        DwmSetWindowAttribute(h, 36, ref red, 4);    // caption text color
+    }
+
     public MainWindow(AppController c)
     {
+        SourceInitialized += (_, _) => BlackFrame();
         _c = c;
         InitializeComponent();
         _c.StateChanged += () => Dispatcher.BeginInvoke(Refresh);

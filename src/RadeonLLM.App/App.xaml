@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <!-- Wraith console theme. Red is #FF3B30 softened 20% toward the background; white is reserved for values. -->
-        <SolidColorBrush x:Key="Bg" Color="#0D0707"/>
+        <SolidColorBrush x:Key="Bg" Color="#000000"/>
         <SolidColorBrush x:Key="Panel" Color="#140B0A"/>
         <SolidColorBrush x:Key="Border" Color="#3A1A17"/>
         <SolidColorBrush x:Key="Track" Color="#240F0D"/>
@@ -70,7 +70,7 @@
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="b" Property="Background" Value="{StaticResource Hi}"/>
                                 <Setter TargetName="b" Property="BorderBrush" Value="{StaticResource Hi}"/>
-                                <Setter Property="Foreground" Value="#0D0707"/>
+                                <Setter Property="Foreground" Value="#000000"/>
                             </Trigger>
                             <Trigger Property="IsEnabled" Value="False"><Setter TargetName="b" Property="Opacity" Value="0.35"/></Trigger>
                         </ControlTemplate.Triggers>
@@ -87,7 +87,7 @@
         </Style>
 
         <Style TargetType="TextBox">
-            <Setter Property="Background" Value="#0D0707"/>
+            <Setter Property="Background" Value="#000000"/>
             <Setter Property="Foreground" Value="{StaticResource Val}"/>
             <Setter Property="BorderBrush" Value="{StaticResource Border}"/>
             <Setter Property="FontFamily" Value="{StaticResource Mono}"/>
@@ -134,7 +134,7 @@
             <Style.Triggers>
                 <Trigger Property="IsHighlighted" Value="True">
                     <Setter Property="Background" Value="{StaticResource Hi}"/>
-                    <Setter Property="Foreground" Value="#0D0707"/>
+                    <Setter Property="Foreground" Value="#000000"/>
                 </Trigger>
             </Style.Triggers>
         </Style>
@@ -149,7 +149,7 @@
                                           ClickMode="Press" Focusable="False">
                                 <ToggleButton.Template>
                                     <ControlTemplate TargetType="ToggleButton">
-                                        <Border Background="#0D0707" BorderBrush="{StaticResource Border}" BorderThickness="1" Padding="8,4">
+                                        <Border Background="#000000" BorderBrush="{StaticResource Border}" BorderThickness="1" Padding="8,4">
                                             <Grid>
                                                 <ContentPresenter Content="{Binding SelectionBoxItem, RelativeSource={RelativeSource AncestorType=ComboBox}}"
                                                                   TextElement.Foreground="{StaticResource Val}" HorizontalAlignment="Left" Margin="0,0,18,0"/>
@@ -204,7 +204,7 @@
                             <Trigger Property="IsMouseOver" Value="True"><Setter TargetName="b" Property="TextElement.Foreground" Value="{StaticResource Fg}"/></Trigger>
                             <Trigger Property="IsSelected" Value="True">
                                 <Setter TargetName="b" Property="Background" Value="{StaticResource Hi}"/>
-                                <Setter TargetName="b" Property="TextElement.Foreground" Value="#0D0707"/>
+                                <Setter TargetName="b" Property="TextElement.Foreground" Value="#000000"/>
                                 <Setter TargetName="b" Property="TextElement.FontWeight" Value="Bold"/>
                             </Trigger>
                         </ControlTemplate.Triggers>
