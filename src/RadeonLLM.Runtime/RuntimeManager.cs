@@ -2,12 +2,20 @@ using System.Diagnostics;
 using System.IO.Compression;
 using System.Security.Cryptography;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using RadeonLLM.Core;
 
 namespace RadeonLLM.Runtime;
 
-public sealed record RuntimeRelease(string Version, string AssetName, string DownloadUrl, long Size, string? Sha256);
+public sealed record RuntimeAsset(string Name, string Url, long Size, string? Sha256);
+
+/// <summary>One installable llama.cpp build. Extras are unpacked into the same folder (e.g. the CUDA runtime DLLs).</summary>
+public sealed record RuntimeRelease(
+    string Version, RuntimeBackend Backend, RuntimeAsset Main, IReadOnlyList<RuntimeAsset> Extras)
+{
+    public string AssetName => Main.Name;
+    public long TotalSize => Main.Size + Extras.Sum(e => e.Size);
+}
 
 public sealed class RuntimeManifest
 {
@@ -17,13 +25,15 @@ public sealed class RuntimeManifest
     public string Architecture { get; set; } = "x64";
     public string? Sha256 { get; set; }
     public DateTime InstalledUtc { get; set; }
-    /// <summary>Previously active version, kept on disk for rollback.</summary>
+    /// <summary>Folder name ("b11400-vulkan") of the previously active build, kept on disk for rollback.</summary>
     public string? Previous { get; set; }
+
+    public RuntimeBackend BackendKind => Enum.TryParse<RuntimeBackend>(Backend, true, out var b) ? b : RuntimeBackend.Vulkan;
 }
 
 public sealed record RuntimeVerification(bool Ok, string Message, string? ReportedVersion);
 
-/// <summary>Owns the llama.cpp installation: install, update, rollback, repair, remove, verify.</summary>
+/// <summary>Owns the llama.cpp installation: install, update, switch backend, rollback, repair, remove, verify.</summary>
 public sealed class RuntimeManager
 {
     const string ReleasesUrl = "https://api.github.com/repos/ggml-org/llama.cpp/releases";
@@ -43,7 +53,16 @@ public sealed class RuntimeManager
     }
 
     string ManifestPath => Path.Combine(_paths.Runtime, "manifest.json");
-    string VersionDir(string v) => Path.Combine(_paths.Runtime, v);
+
+    public static string DirName(string version, RuntimeBackend backend) => $"{version}-{backend.ToString().ToLowerInvariant()}";
+
+    string BuildDir(string version, RuntimeBackend backend)
+    {
+        var dir = Path.Combine(_paths.Runtime, DirName(version, backend));
+        // v0.1 installs used a bare version folder (always Vulkan).
+        var legacy = Path.Combine(_paths.Runtime, version);
+        return !Directory.Exists(dir) && backend == RuntimeBackend.Vulkan && Directory.Exists(legacy) ? legacy : dir;
+    }
 
     public RuntimeManifest? Manifest
     {
@@ -55,23 +74,34 @@ public sealed class RuntimeManager
     }
 
     public string? Version => Manifest?.Version;
+    public RuntimeBackend? ActiveBackend => Manifest is { Version: not null } m ? m.BackendKind : null;
 
     /// <summary>Full path to the active llama-server.exe, or null if not installed.</summary>
-    public string? ServerExe
-    {
-        get
-        {
-            var v = Version;
-            return v is null ? null : FindServer(VersionDir(v));
-        }
-    }
+    public string? ServerExe => Manifest is { Version: { } v } m ? FindServer(BuildDir(v, m.BackendKind)) : null;
 
     public bool IsInstalled => ServerExe is not null;
 
-    public IReadOnlyList<string> InstalledVersions =>
-        Directory.Exists(_paths.Runtime)
-            ? Directory.GetDirectories(_paths.Runtime).Select(Path.GetFileName).Where(n => n is not null).Select(n => n!).OrderDescending().ToList()
-            : [];
+    /// <summary>Versions on disk for a backend, newest first.</summary>
+    public IReadOnlyList<string> InstalledBuilds(RuntimeBackend backend) =>
+        !Directory.Exists(_paths.Runtime) ? [] :
+        Directory.GetDirectories(_paths.Runtime).Select(d => ParseDirName(Path.GetFileName(d)))
+            .Where(x => x is { } t && t.backend == backend && FindServer(BuildDir(t.version, t.backend)) is not null)
+            .Select(x => x!.Value.version).OrderDescending().ToList();
+
+    public bool HasBuild(string version, RuntimeBackend backend) => FindServer(BuildDir(version, backend)) is not null;
+
+    /// <summary>Make an already-downloaded build the active one. Returns false if it is not on disk.</summary>
+    public bool Activate(string version, RuntimeBackend backend)
+    {
+        if (!HasBuild(version, backend)) return false;
+        var old = Manifest;
+        Save(new RuntimeManifest
+        {
+            Version = version, Backend = backend.ToString(), InstalledUtc = DateTime.UtcNow,
+            Previous = old?.Version is { } ov ? DirName(ov, old.BackendKind) : old?.Previous
+        });
+        return true;
+    }
 
     static string? FindServer(string dir) =>
         Directory.Exists(dir) ? Directory.EnumerateFiles(dir, "llama-server.exe", SearchOption.AllDirectories).FirstOrDefault() : null;
@@ -79,38 +109,62 @@ public sealed class RuntimeManager
     // ---- discovery ----
 
     /// <summary>
-    /// Newest build with a Windows x64 Vulkan zip. The "latest" API endpoint points at a pinned non-build tag,
+    /// Newest build with an asset for the backend. The "latest" API endpoint points at a pinned non-build tag,
     /// and build releases are flagged prerelease, so scan the recent release list instead.
     /// </summary>
-    public async Task<RuntimeRelease> GetLatestAsync(CancellationToken ct = default)
+    public async Task<RuntimeRelease> GetLatestAsync(RuntimeBackend backend = RuntimeBackend.Vulkan, string? cudaVersion = null, CancellationToken ct = default)
     {
         var url = ReleasesUrl + "?per_page=15";
         _gate.EnsureAllowed(new Uri(url));
         using var doc = JsonDocument.Parse(await _http.GetStringAsync(url, ct));
         foreach (var rel in doc.RootElement.EnumerateArray())
-            if (!(rel.TryGetProperty("draft", out var d) && d.GetBoolean()) && ParseRelease(rel) is { } r) return r;
-        throw new InvalidOperationException("No recent llama.cpp release has a Windows x64 Vulkan build.");
+            if (!(rel.TryGetProperty("draft", out var d) && d.GetBoolean()) && ParseRelease(rel, backend, cudaVersion) is { } r) return r;
+        throw new InvalidOperationException($"No recent llama.cpp release has a Windows x64 {BackendSelector.Label(backend)} build.");
     }
 
-    public async Task<RuntimeRelease> GetTaggedAsync(string tag, CancellationToken ct = default)
+    public async Task<RuntimeRelease> GetTaggedAsync(string tag, RuntimeBackend backend, string? cudaVersion = null, CancellationToken ct = default)
     {
         var url = $"{ReleasesUrl}/tags/{tag}";
         _gate.EnsureAllowed(new Uri(url));
         using var doc = JsonDocument.Parse(await _http.GetStringAsync(url, ct));
-        return ParseRelease(doc.RootElement) ?? throw new InvalidOperationException($"Release {tag} has no Windows x64 Vulkan build.");
+        return ParseRelease(doc.RootElement, backend, cudaVersion)
+            ?? throw new InvalidOperationException($"Release {tag} has no Windows x64 {BackendSelector.Label(backend)} build.");
     }
 
-    static RuntimeRelease? ParseRelease(JsonElement root)
+    public static RuntimeRelease? ParseRelease(JsonElement root, RuntimeBackend backend, string? cudaVersion = null)
     {
         var tag = root.GetProperty("tag_name").GetString()!;
-        foreach (var a in root.GetProperty("assets").EnumerateArray())
+        var assets = root.GetProperty("assets").EnumerateArray().Select(a =>
         {
-            var name = a.GetProperty("name").GetString()!;
-            if (!name.StartsWith("llama-", StringComparison.OrdinalIgnoreCase) || !name.EndsWith("-bin-win-vulkan-x64.zip", StringComparison.OrdinalIgnoreCase)) continue;
             string? sha = null;
-            if (a.TryGetProperty("digest", out var d) && d.GetString() is { } ds && ds.StartsWith("sha256:"))
-                sha = ds[7..];
-            return new RuntimeRelease(tag, name, a.GetProperty("browser_download_url").GetString()!, a.GetProperty("size").GetInt64(), sha);
+            if (a.TryGetProperty("digest", out var d) && d.GetString() is { } ds && ds.StartsWith("sha256:")) sha = ds[7..];
+            return new RuntimeAsset(a.GetProperty("name").GetString()!, a.GetProperty("browser_download_url").GetString()!, a.GetProperty("size").GetInt64(), sha);
+        }).ToList();
+
+        RuntimeAsset? Find(Func<string, bool> pred) => assets.FirstOrDefault(a => pred(a.Name));
+        bool Llama(string n, string suffix) =>
+            n.StartsWith("llama-", StringComparison.OrdinalIgnoreCase) && n.EndsWith(suffix, StringComparison.OrdinalIgnoreCase);
+
+        switch (backend)
+        {
+            case RuntimeBackend.Vulkan:
+            case RuntimeBackend.Auto:
+                return Find(n => Llama(n, "-bin-win-vulkan-x64.zip")) is { } v ? new(tag, RuntimeBackend.Vulkan, v, []) : null;
+            case RuntimeBackend.Cpu:
+                return Find(n => Llama(n, "-bin-win-cpu-x64.zip")) is { } c ? new(tag, RuntimeBackend.Cpu, c, []) : null;
+            case RuntimeBackend.Rocm:
+                return Find(n => n.StartsWith("llama-", StringComparison.OrdinalIgnoreCase) && Regex.IsMatch(n, @"-bin-win-rocm-[\d.]+-x64\.zip$")) is { } r
+                    ? new(tag, RuntimeBackend.Rocm, r, []) : null;
+            case RuntimeBackend.Cuda:
+                // Newest CUDA the driver supports first; older CUDA runs on newer drivers, never the reverse.
+                var cap = double.TryParse(cudaVersion, System.Globalization.CultureInfo.InvariantCulture, out var cv) ? cv : double.MaxValue;
+                foreach (var ver in new[] { "13.4", "12.4" }.Where(x => double.Parse(x, System.Globalization.CultureInfo.InvariantCulture) <= cap))
+                {
+                    var main = Find(n => Llama(n, $"-bin-win-cuda-{ver}-x64.zip"));
+                    var rt = Find(n => n.StartsWith("cudart-", StringComparison.OrdinalIgnoreCase) && n.EndsWith($"-cuda-{ver}-x64.zip", StringComparison.OrdinalIgnoreCase));
+                    if (main is not null && rt is not null) return new(tag, RuntimeBackend.Cuda, main, [rt]);
+                }
+                return null;
         }
         return null;
     }
@@ -118,49 +172,69 @@ public sealed class RuntimeManager
     /// <summary>Returns the newer release if one exists and was not ignored; never installs automatically.</summary>
     public async Task<RuntimeRelease?> CheckForUpdateAsync(string? ignoredVersion, CancellationToken ct = default)
     {
-        var latest = await GetLatestAsync(ct);
-        if (latest.Version == Version || latest.Version == ignoredVersion) return null;
+        var m = Manifest;
+        var backend = m?.BackendKind ?? RuntimeBackend.Vulkan;
+        var cuda = backend == RuntimeBackend.Cuda ? ExistingCudaVersion() : null;
+        var latest = await GetLatestAsync(backend, cuda, ct);
+        if (latest.Version == m?.Version || latest.Version == ignoredVersion) return null;
         return latest;
+    }
+
+    string? ExistingCudaVersion()
+    {
+        var exeDir = Path.GetDirectoryName(ServerExe);
+        if (exeDir is null) return null;
+        var ver = Directory.EnumerateFiles(exeDir, "cudart64_*.dll").Select(Path.GetFileName).FirstOrDefault();
+        return ver is null ? null : ver.Contains("_13") ? "13.4" : "12.4";
     }
 
     // ---- install ----
 
     public async Task InstallAsync(RuntimeRelease rel, IProgress<(string stage, double fraction)>? progress = null, CancellationToken ct = default)
     {
-        _gate.EnsureAllowed(new Uri(rel.DownloadUrl));
         Directory.CreateDirectory(_paths.Runtime);
         Directory.CreateDirectory(_paths.Cache);
-        var zip = Path.Combine(_paths.Cache, rel.AssetName);
-        _log.Info($"Downloading runtime {rel.Version} ({rel.AssetName})");
+        var all = new[] { rel.Main }.Concat(rel.Extras).ToList();
+        foreach (var a in all) _gate.EnsureAllowed(new Uri(a.Url));
 
-        using (var resp = await _http.GetAsync(rel.DownloadUrl, HttpCompletionOption.ResponseHeadersRead, ct))
-        {
-            resp.EnsureSuccessStatusCode();
-            var total = resp.Content.Headers.ContentLength ?? rel.Size;
-            await using var src = await resp.Content.ReadAsStreamAsync(ct);
-            await using var dst = File.Create(zip);
-            var buf = new byte[81920]; long done = 0; int n;
-            while ((n = await src.ReadAsync(buf, ct)) > 0)
-            {
-                await dst.WriteAsync(buf.AsMemory(0, n), ct);
-                done += n;
-                if (total > 0) progress?.Report(("Downloading inference runtime...", (double)done / total * 0.8));
-            }
-        }
-
-        progress?.Report(("Verifying...", 0.82));
-        var hash = await Sha256Async(zip, ct);
-        if (rel.Sha256 is not null && !hash.Equals(rel.Sha256, StringComparison.OrdinalIgnoreCase))
-        {
-            File.Delete(zip);
-            throw new InvalidDataException("Runtime download failed integrity check (SHA-256 mismatch).");
-        }
-
-        progress?.Report(("Extracting...", 0.88));
-        var dir = VersionDir(rel.Version);
+        var dir = Path.Combine(_paths.Runtime, DirName(rel.Version, rel.Backend));
         var tmp = dir + ".tmp";
         if (Directory.Exists(tmp)) Directory.Delete(tmp, true);
-        ZipFile.ExtractToDirectory(zip, tmp);
+
+        long total = all.Sum(a => a.Size), done = 0;
+        string? mainHash = null;
+        foreach (var asset in all)
+        {
+            var zip = Path.Combine(_paths.Cache, asset.Name);
+            _log.Info($"Downloading runtime asset {asset.Name} ({rel.Version}, {rel.Backend})");
+            using (var resp = await _http.GetAsync(asset.Url, HttpCompletionOption.ResponseHeadersRead, ct))
+            {
+                resp.EnsureSuccessStatusCode();
+                await using var src = await resp.Content.ReadAsStreamAsync(ct);
+                await using var dst = File.Create(zip);
+                var buf = new byte[81920]; int n;
+                while ((n = await src.ReadAsync(buf, ct)) > 0)
+                {
+                    await dst.WriteAsync(buf.AsMemory(0, n), ct);
+                    done += n;
+                    if (total > 0) progress?.Report(("Downloading inference runtime...", (double)done / total * 0.8));
+                }
+            }
+
+            progress?.Report(("Verifying...", 0.82));
+            var hash = await Sha256Async(zip, ct);
+            if (asset.Sha256 is not null && !hash.Equals(asset.Sha256, StringComparison.OrdinalIgnoreCase))
+            {
+                File.Delete(zip);
+                throw new InvalidDataException($"{asset.Name} failed integrity check (SHA-256 mismatch).");
+            }
+            if (asset == rel.Main) mainHash = hash;
+
+            progress?.Report(("Extracting...", 0.88));
+            ZipFile.ExtractToDirectory(zip, tmp, overwriteFiles: true);
+            File.Delete(zip);
+        }
+
         if (FindServer(tmp) is null)
         {
             Directory.Delete(tmp, true);
@@ -168,34 +242,47 @@ public sealed class RuntimeManager
         }
         if (Directory.Exists(dir)) Directory.Delete(dir, true);
         Directory.Move(tmp, dir);
-        File.Delete(zip);
 
         var old = Manifest;
+        var oldDir = old?.Version is { } ov ? DirName(ov, old.BackendKind) : old?.Previous;
         Save(new RuntimeManifest
         {
-            Version = rel.Version, Sha256 = hash, InstalledUtc = DateTime.UtcNow,
-            Previous = old?.Version is { } ov && ov != rel.Version ? ov : old?.Previous
+            Version = rel.Version, Backend = rel.Backend.ToString(), Sha256 = mainHash, InstalledUtc = DateTime.UtcNow,
+            Previous = oldDir == DirName(rel.Version, rel.Backend) ? old?.Previous : oldDir
         });
-        _log.Info($"Runtime {rel.Version} installed.");
+        _log.Info($"Runtime {rel.Version} ({rel.Backend}) installed.");
         progress?.Report(("Runtime ready.", 1));
     }
 
-    public bool CanRollback => Manifest?.Previous is { } p && FindServer(VersionDir(p)) is not null;
+    static (string version, RuntimeBackend backend)? ParseDirName(string? dir)
+    {
+        if (dir is null) return null;
+        var i = dir.LastIndexOf('-');
+        if (i < 0) return (dir, RuntimeBackend.Vulkan);
+        return Enum.TryParse<RuntimeBackend>(dir[(i + 1)..], true, out var b) ? (dir[..i], b) : (dir, RuntimeBackend.Vulkan);
+    }
+
+    public bool CanRollback => ParseDirName(Manifest?.Previous) is { } p && HasBuild(p.version, p.backend);
 
     public void Rollback()
     {
         var m = Manifest ?? throw new InvalidOperationException("No runtime installed.");
-        if (m.Previous is null || FindServer(VersionDir(m.Previous)) is null)
+        if (ParseDirName(m.Previous) is not { } p || !HasBuild(p.version, p.backend))
             throw new InvalidOperationException("No previous runtime to roll back to.");
-        Save(new RuntimeManifest { Version = m.Previous, InstalledUtc = DateTime.UtcNow, Previous = m.Version });
-        _log.Info($"Rolled back to {m.Previous}.");
+        Save(new RuntimeManifest
+        {
+            Version = p.version, Backend = p.backend.ToString(), InstalledUtc = DateTime.UtcNow,
+            Previous = m.Version is { } v ? DirName(v, m.BackendKind) : null
+        });
+        _log.Info($"Rolled back to {p.version} ({p.backend}).");
     }
 
-    /// <summary>Reinstalls the pinned version from its release tag.</summary>
+    /// <summary>Reinstalls the pinned version and backend from its release tag.</summary>
     public async Task RepairAsync(IProgress<(string, double)>? progress = null, CancellationToken ct = default)
     {
-        var v = Version ?? throw new InvalidOperationException("No runtime installed.");
-        await InstallAsync(await GetTaggedAsync(v, ct), progress, ct);
+        var m = Manifest;
+        var v = m?.Version ?? throw new InvalidOperationException("No runtime installed.");
+        await InstallAsync(await GetTaggedAsync(v, m!.BackendKind, ExistingCudaVersion(), ct), progress, ct);
     }
 
     public void Remove()
@@ -222,7 +309,7 @@ public sealed class RuntimeManager
         catch (Exception ex) { return new(false, ex.Message, null); }
     }
 
-    /// <summary>Runs --list-devices: the definitive "does Vulkan work with this GPU" test.</summary>
+    /// <summary>Runs --list-devices: the definitive "does this backend work with this GPU" test.</summary>
     public async Task<IReadOnlyList<RuntimeDevice>> ListDevicesAsync(CancellationToken ct = default)
     {
         var exe = ServerExe ?? throw new InvalidOperationException("Runtime not installed.");

@@ -2,9 +2,16 @@ using System.Text.RegularExpressions;
 
 namespace RadeonLLM.Runtime;
 
+public enum DeviceKind { Vulkan, Cuda, Rocm, Other }
+
 public sealed record RuntimeDevice(string Id, string Name, long TotalMiB, long FreeMiB)
 {
-    public bool IsVulkan => Id.StartsWith("Vulkan", StringComparison.OrdinalIgnoreCase);
+    public DeviceKind Kind =>
+        Id.StartsWith("Vulkan", StringComparison.OrdinalIgnoreCase) ? DeviceKind.Vulkan
+        : Id.StartsWith("CUDA", StringComparison.OrdinalIgnoreCase) ? DeviceKind.Cuda
+        : Id.StartsWith("ROCm", StringComparison.OrdinalIgnoreCase) || Id.StartsWith("HIP", StringComparison.OrdinalIgnoreCase) ? DeviceKind.Rocm
+        : DeviceKind.Other;
+    public bool IsVulkan => Kind == DeviceKind.Vulkan;
 }
 
 /// <summary>Parses lines such as "  Vulkan0: AMD Radeon RX 6900 XT (16368 MiB, 16000 MiB free)".</summary>

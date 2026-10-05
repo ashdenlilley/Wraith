@@ -77,46 +77,94 @@ public sealed class AppController : IDisposable
 
     public void RefreshSystem() { Hw = HardwareDetector.Detect(); StateChanged?.Invoke(); }
 
-    /// <summary>VRAM we can plan to use: total minus what other apps already hold.</summary>
+    public bool IsCpuBackend => Runtime.ActiveBackend == RuntimeBackend.Cpu;
+
+    public string BackendLabel => Runtime.ActiveBackend is { } b ? BackendSelector.Label(b) : "not installed";
+
+    /// <summary>Memory we can plan to use: free VRAM on a GPU backend, free system RAM on CPU.</summary>
     public long AvailableVram()
     {
-        long total = Device is { TotalMiB: > 0 } d ? d.TotalMiB * 1048576L : Gpu?.VramBytes ?? 0;
-        if (total == 0) return 0;
+        if (IsCpuBackend)
+        {
+            var (total, usedFraction) = HardwareDetector.Ram();
+            return (long)(total * (1 - usedFraction) * 0.85);
+        }
+        long vram = Device is { TotalMiB: > 0 } d ? d.TotalMiB * 1048576L : Gpu?.VramBytes ?? 0;
+        if (vram == 0) return 0;
         long used = Server.State == ServerState.Running ? 0 : Monitor.Latest?.VramUsedBytes ?? 0;
-        return Math.Max(total - used - (256L << 20), total / 4);
+        return Math.Max(vram - used - (256L << 20), vram / 4);
     }
 
     public ConfigPlan PlanFor(ModelEntry m) =>
-        ConfigBuilder.Build(Settings, m, AvailableVram(), Hw.CpuThreads, SafeMode, Device?.Id);
+        ConfigBuilder.Build(Settings, m, AvailableVram(), Hw.CpuThreads, SafeMode, IsCpuBackend ? null : Device?.Id, IsCpuBackend);
 
     // ---------- setup ----------
 
-    public async Task SetupRuntimeAsync(IProgress<(string, double)> progress, CancellationToken ct = default)
+    /// <summary>
+    /// Installs (or switches to) a backend. Auto walks the hardware-appropriate candidates and keeps the first
+    /// whose --list-devices shows a working device; an explicit choice is verified and rolled back on failure.
+    /// </summary>
+    public async Task<RuntimeBackend> SetupRuntimeAsync(IProgress<(string, double)> progress, CancellationToken ct = default)
     {
-        var rel = await Runtime.GetLatestAsync(ct);
-        await Runtime.InstallAsync(rel, progress, ct);
-        progress.Report(("Testing GPU...", 0.97));
-        await ProbeDeviceAsync(ct);
-        progress.Report(("Runtime ready.", 1));
+        var requested = Settings.Backend;
+        var candidates = BackendSelector.Candidates(requested, Hw);
+        var priorVersion = Runtime.Version; var priorBackend = Runtime.ActiveBackend;
+        var cuda = BackendSelector.CudaVersionFor(BackendSelector.NvidiaDriverVersion(Gpu?.DriverVersion));
+        Exception? last = null;
+
+        foreach (var backend in candidates)
+        {
+            try
+            {
+                progress.Report(($"Preparing {BackendSelector.Label(backend)} runtime...", 0.02));
+                var latest = await Runtime.GetLatestAsync(backend, cuda, ct);
+                if (!(Runtime.HasBuild(latest.Version, backend) && Runtime.Activate(latest.Version, backend)))
+                {
+                    // Prefer a build we already have over forcing a re-download on a backend switch.
+                    var existing = Runtime.InstalledBuilds(backend).FirstOrDefault();
+                    if (existing is not null && requested != RuntimeBackend.Auto && Runtime.Activate(existing, backend)) { }
+                    else await Runtime.InstallAsync(latest, progress, ct);
+                }
+                progress.Report(("Testing GPU...", 0.97));
+                var ok = await ProbeDeviceAsync(ct);
+                if (BackendSelector.Works(backend, ok)) { progress.Report(("Runtime ready.", 1)); StateChanged?.Invoke(); return backend; }
+                last = new InvalidOperationException($"The {BackendSelector.Label(backend)} runtime started but found no compatible device.");
+                Logs.App.Warn(last.Message);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                last = ex;
+                Logs.App.Error($"{BackendSelector.Label(backend)} setup failed", ex);
+            }
+        }
+
+        // Nothing worked: restore what was active before so the app keeps functioning.
+        if (priorVersion is not null && priorBackend is { } pb) { Runtime.Activate(priorVersion, pb); await ProbeDeviceAsync(ct); }
         StateChanged?.Invoke();
+        throw new InvalidOperationException(last?.Message ?? "Runtime setup failed.");
     }
 
-    static string Norm(string s) => new(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
-
-    public async Task ProbeDeviceAsync(CancellationToken ct = default)
+    /// <summary>Lists devices for the active backend and picks the one matching the detected GPU.</summary>
+    public async Task<IReadOnlyList<RuntimeDevice>> ProbeDeviceAsync(CancellationToken ct = default)
     {
+        Device = null;
+        if (!Runtime.IsInstalled) return [];
         try
         {
             var devs = await Runtime.ListDevicesAsync(ct);
-            // Pick the GPU RadeonLLM detected (iGPUs can report huge shared memory, so never choose by size alone).
-            var vk = devs.Where(d => d.IsVulkan).ToList();
+            var gpus = devs.Where(d => d.Kind != DeviceKind.Other).ToList();
             var want = Gpu?.Name;
-            Device = (want is null ? null : vk.FirstOrDefault(d => Norm(d.Name) == Norm(want) || Norm(d.Name).Contains(Norm(want)) || Norm(want).Contains(Norm(d.Name))))
-                ?? vk.FirstOrDefault();
-            Logs.App.Info(Device is null ? "Runtime reports no Vulkan device." : $"Vulkan device: {Device.Name} ({Device.TotalMiB} MiB)");
+            // Pick by name, never by size alone: iGPUs can report huge shared memory.
+            Device = (want is null ? null : gpus.FirstOrDefault(d => Norm(d.Name) == Norm(want) || Norm(d.Name).Contains(Norm(want)) || Norm(want).Contains(Norm(d.Name))))
+                ?? gpus.FirstOrDefault();
+            if (IsCpuBackend) Device = null;
+            Logs.App.Info(Device is null ? $"{BackendLabel}: no GPU device (CPU inference)." : $"{BackendLabel} device: {Device.Id} {Device.Name} ({Device.TotalMiB} MiB)");
+            return devs;
         }
-        catch (Exception ex) { Logs.App.Error("Device probe failed", ex); }
+        catch (Exception ex) { Logs.App.Error("Device probe failed", ex); return []; }
     }
+
+    static string Norm(string s) => new(s.Where(char.IsLetterOrDigit).Select(char.ToLowerInvariant).ToArray());
 
     // ---------- run ----------
 

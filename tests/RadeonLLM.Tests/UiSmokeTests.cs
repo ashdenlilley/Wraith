@@ -5,6 +5,7 @@ using Xunit;
 
 namespace RadeonLLM.Tests;
 
+[Collection("env")]
 public class UiSmokeTests
 {
     static void Sta(Action a)

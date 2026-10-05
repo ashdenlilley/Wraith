@@ -194,6 +194,15 @@
 
                     <TextBlock Text="RUNTIME" Style="{StaticResource H}"/>
                     <TextBlock x:Name="RuntimeText"/>
+                    <TextBlock Text="Backend" Style="{StaticResource H}"/>
+                    <StackPanel Orientation="Horizontal">
+                        <ComboBox x:Name="BackendBox" Width="200" Margin="0,0,8,0">
+                            <ComboBoxItem Content="Auto (recommended)"/><ComboBoxItem Content="Vulkan (AMD / NVIDIA / Intel)"/>
+                            <ComboBoxItem Content="CUDA (NVIDIA)"/><ComboBoxItem Content="ROCm / HIP (recent AMD)"/><ComboBoxItem Content="CPU only"/>
+                        </ComboBox>
+                        <Button Content="Install / Switch Backend" Click="BackendApply_Click"/>
+                    </StackPanel>
+                    <TextBlock x:Name="BackendHint" Style="{StaticResource Muted}" Margin="0,4,0,0"/>
                     <WrapPanel Margin="0,8,0,0">
                         <Button Content="Check for Update" Click="RtCheck_Click"/>
                         <Button x:Name="RtUpdateBtn" Content="Update" Click="RtUpdate_Click" Visibility="Collapsed"/>

@@ -6,6 +6,7 @@ using Xunit;
 namespace RadeonLLM.Tests;
 
 /// <summary>Opt-in: set RADEONLLM_LIVE=1. Downloads the real llama.cpp Vulkan runtime and probes the GPU.</summary>
+[Collection("env")]
 public class LiveRuntimeTests
 {
     [Fact]
@@ -28,6 +29,7 @@ public class LiveRuntimeTests
 }
 
 /// <summary>Opt-in end-to-end: RADEONLLM_LIVE=1 and RADEONLLM_TEST_GGUF=path. Real llama-server on the GPU through the API proxy.</summary>
+[Collection("env")]
 public class LiveEndToEndTests
 {
     [Fact]
@@ -125,5 +127,51 @@ public class LiveEndToEndTests
             Assert.True(r.Tokens > 0);
         }
         finally { await server.StopAsync(); }
+    }
+}
+
+/// <summary>Opt-in: backend selection, CPU inference and failed-backend rollback through the real AppController.</summary>
+[Collection("env")]
+public class LiveBackendTests
+{
+    [Fact]
+    public async Task AutoPicksVulkanThenCpuRunsThenBadRocmRollsBack()
+    {
+        var gguf = Environment.GetEnvironmentVariable("RADEONLLM_TEST_GGUF");
+        if (Environment.GetEnvironmentVariable("RADEONLLM_LIVE") != "1" || gguf is null) return;
+
+        Environment.SetEnvironmentVariable("RADEONLLM_HOME", Directory.CreateTempSubdirectory().FullName);
+        using var c = new RadeonLLM.App.AppController();
+        var progress = new Progress<(string, double)>();
+
+        // 1. Auto on an AMD box chooses Vulkan and finds the GPU.
+        Assert.Equal(RuntimeBackend.Auto, c.Settings.Backend);
+        Assert.Equal(RuntimeBackend.Vulkan, await c.SetupRuntimeAsync(progress));
+        Assert.Equal(RuntimeBackend.Vulkan, c.Runtime.ActiveBackend);
+        Assert.NotNull(c.Device);
+
+        // 2. Switch to CPU and serve a model with no GPU involved.
+        c.Settings.Backend = RuntimeBackend.Cpu;
+        Assert.Equal(RuntimeBackend.Cpu, await c.SetupRuntimeAsync(progress));
+        Assert.True(c.IsCpuBackend); Assert.Null(c.Device);
+        Assert.True(c.Runtime.HasBuild(c.Runtime.Version!, RuntimeBackend.Vulkan)); // both builds coexist
+
+        var m = await c.Library.ImportAsync(gguf, copy: false);
+        c.Settings.DefaultModelId = m.Id; c.Settings.Port = 18281;
+        await c.StartAsync();
+        try
+        {
+            Assert.Equal(0, c.LastPlan!.Config.GpuLayers);
+            var r = await RadeonLLM.Analytics.BenchmarkRunner.RunAsync(c.CreateApiClient(), c.Store, null, m.Id, m.Quantization,
+                c.LastPlan.Config.Context, "CPU", c.Runtime.Version, iterations: 1, genTokens: 64);
+            Console.WriteLine($"CPU BENCH gen={r.GenAvg:0.0} tok/s");
+            Assert.True(r.GenAvg > 1);
+        }
+        finally { await c.StopAsync(); }
+
+        // 3. ROCm cannot see the 6900 XT: setup must fail and leave CPU active.
+        c.Settings.Backend = RuntimeBackend.Rocm;
+        await Assert.ThrowsAsync<InvalidOperationException>(() => c.SetupRuntimeAsync(progress));
+        Assert.Equal(RuntimeBackend.Cpu, c.Runtime.ActiveBackend);
     }
 }

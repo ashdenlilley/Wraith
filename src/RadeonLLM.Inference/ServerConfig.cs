@@ -33,7 +33,7 @@ public static class ConfigBuilder
 {
     public const int AutoLayers = 999;
 
-    public static ConfigPlan Build(AppSettings s, ModelEntry m, long availableVramBytes, int cpuThreads, bool safeMode = false, string? deviceId = null)
+    public static ConfigPlan Build(AppSettings s, ModelEntry m, long availableVramBytes, int cpuThreads, bool safeMode = false, string? deviceId = null, bool cpuOnly = false)
     {
         var profile = safeMode ? PerformanceProfile.Safe : s.Profile;
         int modelMax = (int)Math.Min(m.ContextLength ?? 32768, 131072);
@@ -57,6 +57,12 @@ public static class ConfigBuilder
         ubatch = Math.Min(ubatch, batch);
 
         double kvBytes = kv == "q8_0" ? 1.0625 : 2.0;
+        if (cpuOnly)
+        {
+            // No GPU: weights and KV live in system RAM, so keep batches small and context modest.
+            ctx = Math.Min(ctx, 8192); batch = Math.Min(batch, 512); ubatch = Math.Min(ubatch, 512);
+            if (profile == PerformanceProfile.Maximum) ctx = Math.Min(modelMax, 16384);
+        }
         var pre = VramPreflight.Estimate(m, ctx, availableVramBytes, layerFraction, batch, kvBytes);
         bool adjusted = false; string? note = null;
 
@@ -77,9 +83,9 @@ public static class ConfigBuilder
             pre = VramPreflight.Estimate(m, ctx, availableVramBytes, layerFraction, batch, kvBytes);
         }
 
-        int ngl = AutoLayers;
-        if (layerFraction < 1.0 && m.BlockCount is { } bc && bc > 0) ngl = (int)Math.Floor(bc * layerFraction);
-        if (profile == PerformanceProfile.Custom && s.GpuLayers >= 0) ngl = s.GpuLayers;
+        int ngl = cpuOnly ? 0 : AutoLayers;
+        if (!cpuOnly && layerFraction < 1.0 && m.BlockCount is { } bc && bc > 0) ngl = (int)Math.Floor(bc * layerFraction);
+        if (!cpuOnly && profile == PerformanceProfile.Custom && s.GpuLayers >= 0) ngl = s.GpuLayers;
 
         var threads = s.Threads > 0 ? s.Threads : Math.Max(1, cpuThreads / 2);
         var cfg = new ServerConfig(m.Path, m.Id, ctx, ngl, batch, Math.Min(ubatch, batch), fa, threads, kv, s.InternalPort, deviceId);

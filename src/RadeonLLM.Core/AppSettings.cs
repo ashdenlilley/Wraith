@@ -5,9 +5,13 @@ namespace RadeonLLM.Core;
 
 public enum PerformanceProfile { Safe, Balanced, Maximum, Custom }
 
+/// <summary>llama.cpp build flavour. Auto picks per detected hardware (see BackendSelector).</summary>
+public enum RuntimeBackend { Auto, Vulkan, Cuda, Rocm, Cpu }
+
 public sealed class AppSettings
 {
     public PerformanceProfile Profile { get; set; } = PerformanceProfile.Balanced;
+    public RuntimeBackend Backend { get; set; } = RuntimeBackend.Auto;
     /// <summary>Requested context in tokens. Used by Custom; other profiles derive it.</summary>
     public int ContextSize { get; set; } = 16384;
     /// <summary>-1 = automatic maximum.</summary>

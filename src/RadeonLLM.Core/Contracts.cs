@@ -8,8 +8,8 @@ public sealed record GpuInfo(string Name, string Vendor, long VramBytes, string?
 public sealed record SystemInfo(
     IReadOnlyList<GpuInfo> Gpus, string CpuName, int CpuThreads, long RamBytes, bool VulkanLoaderPresent)
 {
-    /// <summary>Best GPU: AMD first, then largest VRAM.</summary>
-    public GpuInfo? PrimaryGpu => Gpus.OrderByDescending(g => g.Vendor == "AMD").ThenByDescending(g => g.VramBytes).FirstOrDefault();
+    /// <summary>Best GPU: most dedicated VRAM (so a discrete card beats an iGPU), any vendor.</summary>
+    public GpuInfo? PrimaryGpu => Gpus.OrderByDescending(g => g.VramBytes).ThenByDescending(g => g.Vendor is "AMD" or "NVIDIA").FirstOrDefault();
 }
 
 public sealed record TelemetrySample(

@@ -7,7 +7,7 @@ manages a pinned llama.cpp Vulkan `llama-server.exe` and exposes an OpenAI-compa
 
 ```powershell
 dotnet build                                  # all projects
-dotnet test tests/RadeonLLM.Tests             # 35 tests (unit, API proxy, WPF smoke)
+dotnet test tests/RadeonLLM.Tests             # 52 tests (unit, API proxy, backend selection, WPF smoke)
 dotnet publish src/RadeonLLM.App -c Release -o publish   # self-contained single-file publish/RadeonLLM.exe
 ```
 
@@ -20,6 +20,20 @@ $env:RADEONLLM_LIVE = 1
 $env:RADEONLLM_TEST_GGUF = "C:\path\to\small-model.gguf"
 dotnet test tests/RadeonLLM.Tests
 ```
+
+## Backends
+
+Auto-selected from detected hardware (override in Settings, builds coexist on disk):
+
+| Hardware | Auto picks | Fallback |
+|---|---|---|
+| NVIDIA, driver 525+ | CUDA (13.4 on driver 580+, else 12.4) | Vulkan, CPU |
+| AMD / Intel / other GPU | Vulkan | CPU |
+| No GPU | CPU | |
+
+ROCm/HIP is opt-in. Every install is verified with `llama-server --list-devices`; if the backend sees no device
+the app falls back (Auto) or restores the previous runtime (explicit choice).
+Tested on AMD (Vulkan) and CPU. CUDA and ROCm success paths are untested: no NVIDIA/ROCm-capable hardware was available.
 
 ## Layout
 

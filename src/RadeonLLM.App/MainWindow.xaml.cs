@@ -14,6 +14,7 @@ using RadeonLLM.Core;
 using RadeonLLM.Inference;
 using RadeonLLM.Models;
 using RadeonLLM.Runtime;
+using RadeonLLM.Runtime;
 
 namespace RadeonLLM.App;
 
@@ -59,10 +60,14 @@ public partial class MainWindow : Window
     {
         var gpu = _c.Gpu;
         GpuText.Text = gpu is null ? "No GPU detected" : $"{gpu.Name}   {gpu.VramGb:0} GB";
-        VulkanText.Text = _c.Device is { } d
-            ? $"Vulkan ✓  ({d.Name})"
-            : _c.Hw.VulkanLoaderPresent ? "Vulkan loader present" + (_c.Runtime.IsInstalled ? " (no device reported by runtime)" : " (verified after Setup)")
-            : "Vulkan ✗  (vulkan-1.dll not found: update your GPU driver)";
+        if (!_c.Runtime.IsInstalled)
+        {
+            var first = BackendSelector.Candidates(_c.Settings.Backend, _c.Hw).FirstOrDefault();
+            VulkanText.Text = $"Runtime will use: {BackendSelector.Label(first)}" + (first == RuntimeBackend.Vulkan && !_c.Hw.VulkanLoaderPresent ? "  (vulkan-1.dll missing: update GPU driver)" : "");
+        }
+        else VulkanText.Text = _c.IsCpuBackend ? $"CPU inference ✓  ({_c.Hw.CpuName})"
+            : _c.Device is { } d ? $"{_c.BackendLabel} ✓  ({d.Name})"
+            : $"{_c.BackendLabel}: no compatible device found. Try another backend in Settings.";
 
         bool installed = _c.Runtime.IsInstalled;
         SetupPanel.Visibility = installed ? Visibility.Collapsed : Visibility.Visible;
@@ -487,6 +492,8 @@ public partial class MainWindow : Window
         LocalOnlyRadio.IsChecked = !s.LanAccess; LanRadio.IsChecked = s.LanAccess;
         LocalKeyBox.IsChecked = s.RequireApiKeyOnLocalhost; OfflineBox.IsChecked = s.OfflineMode;
         CustomPanel.Visibility = s.Profile == PerformanceProfile.Custom ? Visibility.Visible : Visibility.Collapsed;
+        BackendBox.SelectedIndex = (int)s.Backend;
+        BackendHint.Text = $"Detected: {_c.GpuLabel}" + (_c.Gpu is null ? "" : $" ({_c.Gpu.Vendor})") + $", {_c.Hw.CpuName}. Auto picks CUDA for NVIDIA, Vulkan for AMD/Intel, CPU if no GPU.";
         UpdateKeyBox(); UpdateLanText();
         _loading = was;
     }
@@ -558,7 +565,7 @@ public partial class MainWindow : Window
     {
         var m = _c.Runtime.Manifest;
         RuntimeText.Text = m?.Version is null ? "Not installed"
-            : $"llama.cpp {m.Version}  ·  {m.Backend} {m.Architecture}" + (_c.Runtime.CanRollback ? $"  ·  previous: {m.Previous}" : "");
+            : $"llama.cpp {m.Version}  ·  {BackendSelector.Label(m.BackendKind)} {m.Architecture}" + (_c.Runtime.CanRollback ? $"  ·  previous: {m.Previous}" : "");
     }
 
     async Task RtOp(string label, Func<IProgress<(string, double)>, Task> op)
@@ -605,6 +612,17 @@ public partial class MainWindow : Window
     {
         var r = await _c.Runtime.VerifyAsync();
         RtStatus.Text = (r.Ok ? "✓ " : "✗ ") + r.Message + (r.ReportedVersion is null ? "" : "  " + r.ReportedVersion);
+    }
+
+    async void BackendApply_Click(object sender, RoutedEventArgs e)
+    {
+        _c.Settings.Backend = (RuntimeBackend)Math.Max(0, BackendBox.SelectedIndex);
+        _c.SettingsStore.Save();
+        await RtOp("Installing runtime", async p =>
+        {
+            var used = await _c.SetupRuntimeAsync(p);
+            RtStatus.Text = $"Using {BackendSelector.Label(used)}.";
+        });
     }
 
     async void RtRepair_Click(object sender, RoutedEventArgs e) => await RtOp("Repairing runtime", p => _c.Runtime.RepairAsync(p));
