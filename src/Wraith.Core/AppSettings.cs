@@ -14,6 +14,8 @@ public sealed class AppSettings
     public RuntimeBackend Backend { get; set; } = RuntimeBackend.Auto;
     /// <summary>Requested context in tokens. Used by Custom; other profiles derive it.</summary>
     public int ContextSize { get; set; } = 16384;
+    /// <summary>Context in tokens for Safe/Balanced/Maximum. 0 = profile default. Custom uses ContextSize.</summary>
+    public int ContextOverride { get; set; }
     /// <summary>-1 = automatic maximum.</summary>
     public int GpuLayers { get; set; } = -1;
     /// <summary>0 = automatic.</summary>

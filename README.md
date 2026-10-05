@@ -1,6 +1,6 @@
 # Wraith
 
-<img src="docs/wraith-mark.png" width="96" alt="Wraith">
+<img src="assets/icons/wraith-1024.png" width="128" alt="Wraith">
 
 Local LLM runtime manager for Windows (AMD, NVIDIA or CPU), with an OpenAI-compatible API. Implements `Wraith_Windows_Spec_v0.2.md`:
 manages a pinned llama.cpp Vulkan `llama-server.exe` and exposes an OpenAI-compatible API at `http://127.0.0.1:8080/v1`.

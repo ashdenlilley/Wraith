@@ -540,6 +540,9 @@ public partial class MainWindow : Window
         LocalOnlyRadio.IsChecked = !s.LanAccess; LanRadio.IsChecked = s.LanAccess;
         LocalKeyBox.IsChecked = s.RequireApiKeyOnLocalhost; OfflineBox.IsChecked = s.OfflineMode;
         CustomPanel.Visibility = s.Profile == PerformanceProfile.Custom ? Visibility.Visible : Visibility.Collapsed;
+        ContextPanel.Visibility = s.Profile == PerformanceProfile.Custom ? Visibility.Collapsed : Visibility.Visible;
+        CtxPreset.SelectedIndex = Math.Max(0, Array.IndexOf(ConfigBuilder.ContextPresets, s.ContextOverride) + 1);
+        UpdateCtxHint();
         BackendBox.SelectedIndex = (int)s.Backend;
         BackendHint.Text = $"Detected: {_c.GpuLabel}" + (_c.Gpu is null ? "" : $" ({_c.Gpu.Vendor})") + $", {_c.Hw.CpuName}. Auto picks CUDA for NVIDIA, Vulkan for AMD/Intel, CPU if no GPU.";
         UpdateKeyBox(); UpdateLanText();
@@ -559,10 +562,22 @@ public partial class MainWindow : Window
         if (int.TryParse(PortBox.Text, out var port) && port is > 1023 and < 65536 && port != s.InternalPort) s.Port = port;
         s.RequireApiKeyOnLocalhost = LocalKeyBox.IsChecked == true;
         s.OfflineMode = OfflineBox.IsChecked == true;
+        if (CtxPreset.SelectedItem is ComboBoxItem ci && int.TryParse(ci.Tag?.ToString(), out var co)) s.ContextOverride = co;
         CustomPanel.Visibility = s.Profile == PerformanceProfile.Custom ? Visibility.Visible : Visibility.Collapsed;
+        ContextPanel.Visibility = s.Profile == PerformanceProfile.Custom ? Visibility.Collapsed : Visibility.Visible;
+        UpdateCtxHint();
         _c.SettingsStore.Save();
         PlanText.Text = _c.Server.State == ServerState.Running ? "Changes to inference or API settings apply after you stop and run the server again." : "";
         UpdateKeyBox(); UpdateLanText();
+    }
+
+    void UpdateCtxHint()
+    {
+        if (_c.SelectedModel is not { } m) { CtxHint.Text = "No model selected."; return; }
+        var rec = ConfigBuilder.RecommendContext(m, _c.AvailableVram(), _c.IsCpuBackend);
+        var eff = _c.PlanFor(m).Config.Context;
+        CtxHint.Text = $"Recommended for {m.DisplayName}: {rec / 1024}K (model max {(m.ContextLength is { } ml ? ml / 1024 + "K" : "unknown")}). " +
+            $"Effective now: {eff / 1024}K. Set the same value as limit.context for this model in OpenCode.";
     }
 
     void Network_Click(object sender, RoutedEventArgs e)

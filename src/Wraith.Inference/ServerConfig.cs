@@ -32,6 +32,20 @@ public sealed record ConfigPlan(ServerConfig Config, PreflightResult Preflight, 
 public static class ConfigBuilder
 {
     public const int AutoLayers = 999;
+    public static readonly int[] ContextPresets = { 4096, 8192, 16384, 32768, 65536, 131072 };
+
+    /// <summary>Largest preset the model supports and the GPU (or RAM) holds with headroom. Capped at 32K: beyond that local prompt processing gets slow.</summary>
+    public static int RecommendContext(ModelEntry m, long availableBytes, bool cpuOnly = false)
+    {
+        int cap = (int)Math.Min(m.ContextLength ?? 32768, cpuOnly ? 8192 : 32768);
+        int best = 4096;
+        foreach (var c in ContextPresets)
+        {
+            if (c > cap) break;
+            if (VramPreflight.Estimate(m, c, (long)(availableBytes * 0.9), 1.0, 512).Safe) best = c;
+        }
+        return Math.Min(best, Math.Max(512, cap));
+    }
 
     public static ConfigPlan Build(AppSettings s, ModelEntry m, long availableVramBytes, int cpuThreads, bool safeMode = false, string? deviceId = null, bool cpuOnly = false)
     {
@@ -51,6 +65,7 @@ public static class ConfigBuilder
             default:
                 ctx = 16384; fa = true; break;
         }
+        if (profile != PerformanceProfile.Custom && !safeMode && s.ContextOverride >= 512) ctx = s.ContextOverride;
         ctx = Math.Clamp(ctx, 512, modelMax);
         if (profile == PerformanceProfile.Custom && s.GpuLayers >= 0 && m.BlockCount is { } bl && bl > 0)
             layerFraction = Math.Min(1.0, (double)s.GpuLayers / bl);

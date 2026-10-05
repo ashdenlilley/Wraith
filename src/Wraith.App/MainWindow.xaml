@@ -215,6 +215,14 @@
                     <ComboBox x:Name="ProfileBox" SelectionChanged="Settings_Changed" Width="200" HorizontalAlignment="Left">
                         <ComboBoxItem Content="Safe"/><ComboBoxItem Content="Balanced"/><ComboBoxItem Content="Maximum"/><ComboBoxItem Content="Custom"/>
                     </ComboBox>
+                    <StackPanel x:Name="ContextPanel">
+                        <TextBlock Text="Context window" Style="{StaticResource H}"/>
+                        <ComboBox x:Name="CtxPreset" SelectionChanged="Settings_Changed" Width="200" HorizontalAlignment="Left">
+                            <ComboBoxItem Content="Profile default" Tag="0"/><ComboBoxItem Content="4K" Tag="4096"/><ComboBoxItem Content="8K" Tag="8192"/>
+                            <ComboBoxItem Content="16K" Tag="16384"/><ComboBoxItem Content="32K" Tag="32768"/><ComboBoxItem Content="64K" Tag="65536"/><ComboBoxItem Content="128K" Tag="131072"/>
+                        </ComboBox>
+                    </StackPanel>
+                    <TextBlock x:Name="CtxHint" Style="{StaticResource Muted}" TextWrapping="Wrap" Margin="0,4,0,0"/>
                     <StackPanel x:Name="CustomPanel" Visibility="Collapsed">
                         <TextBlock Text="Context (tokens)" Style="{StaticResource H}"/>
                         <TextBox x:Name="CtxBox" Width="120" HorizontalAlignment="Left" LostFocus="Settings_Changed"/>
