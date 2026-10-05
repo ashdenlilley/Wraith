@@ -1,0 +1,90 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Wraith</title><script src="mock.js"></script>
+<style>
+/* red = #FF3B30 softened 20% toward the background; white is reserved for values */
+:root{--bg:#0d0707;--fg:#CF3128;--hi:#FF3B30;--v:#F5F5F5;--m:#7a403c;--b:#3a1a17;--p:#140b0a;--ok:#F5F5F5}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.55 Consolas,"Cascadia Mono",monospace;padding:18px;min-height:100vh}
+body:before{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,#0000 0 2px,#0002 2px 3px);pointer-events:none}
+.top{display:flex;gap:18px;align-items:center;border-bottom:1px solid var(--b);padding-bottom:10px;margin-bottom:14px;flex-wrap:wrap}
+.brand{color:var(--hi);font-weight:700;letter-spacing:3px;font-size:16px}.ver{color:var(--m)}
+.tab{cursor:pointer;color:var(--m);padding:2px 8px}.tab:hover{color:var(--fg)}.tab.on{color:var(--v);background:var(--hi);color:#0d0707;font-weight:700}
+.chip{margin-left:auto;border:1px solid var(--fg);padding:1px 10px}.chip.on{background:var(--fg);color:#0d0707}
+section{display:none}section.on{display:block}
+.v{color:var(--v);font-weight:600}.m{color:var(--m)}.h{color:var(--hi)}.ok{color:var(--v)}
+.panel{border:1px solid var(--b);background:var(--p);padding:10px 14px;margin-bottom:12px;position:relative}
+.panel>.t{position:absolute;top:-10px;left:10px;background:var(--bg);padding:0 8px;color:var(--hi);font-size:12px;letter-spacing:2px;text-transform:uppercase}
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:12px}@media(max-width:900px){.cols{grid-template-columns:1fr}}
+pre{margin:0;white-space:pre-wrap}
+.row{display:grid;grid-template-columns:78px 1fr 130px;gap:10px;align-items:center;margin:3px 0}
+.gauge{height:12px;background:#240f0d;border:1px solid var(--b);position:relative}.gauge i{position:absolute;inset:0 auto 0 0;background:repeating-linear-gradient(90deg,var(--fg) 0 6px,#0000 6px 8px);transition:width .8s}
+.big{font-size:34px;color:var(--v);font-weight:700;line-height:1}.big small{font-size:13px;color:var(--fg);font-weight:400}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:12px}@media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}}
+.kpi{border:1px solid var(--b);background:var(--p);padding:8px 12px}.kpi .l{font-size:11px;letter-spacing:2px;text-transform:uppercase;color:var(--m)}
+table{width:100%;border-collapse:collapse}td,th{padding:5px 10px;border-bottom:1px solid var(--b);text-align:left}th{color:var(--m);font-weight:400;font-size:11px;letter-spacing:2px;text-transform:uppercase}
+tr.def td:first-child:before{content:"▸ ";color:var(--hi)}
+button{background:none;border:1px solid var(--fg);color:var(--fg);font:inherit;padding:3px 14px;cursor:pointer;margin-right:6px}
+button:hover{background:var(--hi);border-color:var(--hi);color:#0d0707}
+button.run{border-color:var(--hi);color:var(--v);font-weight:700;padding:8px 36px;letter-spacing:3px}button.run:hover{color:#0d0707}
+input,select{background:#0d0707;border:1px solid var(--b);color:var(--v);font:inherit;padding:4px 8px;outline:none}input:focus{border-color:var(--hi)}
+.cur:after{content:"█";color:var(--hi);animation:bl 1s steps(2) infinite}@keyframes bl{50%{opacity:0}}
+.chat{height:300px;overflow:auto}.chat .u{color:var(--hi)}.chat .a{color:var(--fg)}.chat .tx{color:var(--v)}
+.keys{margin-top:16px;border-top:1px solid var(--b);padding-top:8px;color:var(--m);font-size:12px}.keys b{color:var(--fg)}
+::selection{background:var(--hi);color:#0d0707}
+</style></head><body>
+<div class="top"><span class="brand">WRAITH</span><span class="ver">v0.2</span><span id="tabs"></span><span class="chip" id="chip">● STOPPED</span><span class="m" id="clock"></span></div>
+
+<section id="home" class="on">
+ <div class="kpis" id="kpis"></div>
+ <div class="cols">
+  <div class="panel"><span class="t">System</span><pre id="sys"></pre></div>
+  <div class="panel"><span class="t">Server</span><pre id="srv"></pre><p style="margin:10px 0 0"><button class="run" id="run">RUN</button><button onclick="copyEp()">copy endpoint</button></p></div>
+ </div>
+ <div class="panel"><span class="t">Live</span><div id="gauges"></div></div>
+</section>
+
+<section id="models"><div class="panel"><span class="t">Installed models</span><table><tr><th>Name</th><th>Quant</th><th>Size</th><th>Est. VRAM</th><th>Fit</th></tr><tbody id="mt"></tbody></table></div>
+ <button>add</button><button>download</button><button>verify</button><button>set default</button></section>
+
+<section id="chat"><div class="panel"><span class="t">Chat · /v1/chat/completions</span><div class="chat" id="cl"></div></div><span class="h">&gt;</span> <input id="ci" style="width:75%" onkeydown="if(event.key=='Enter')send()" placeholder="type a message"></section>
+
+<section id="perf">
+ <div class="kpis" id="pk"></div>
+ <div class="panel"><span class="t">Benchmark history</span><table><tr><th>When</th><th>Gen tok/s</th><th>Prompt tok/s</th><th>Power</th><th>Temp</th><th>vs prev</th><th>Label</th></tr><tbody id="ht"></tbody></table></div>
+ <button>benchmark</button><button>stress 5m</button><button>tune batch</button></section>
+
+<section id="set"><div class="panel"><span class="t">Configuration</span><pre>
+<span class="m">profile ........</span> <span class="v">balanced</span>   <span class="m">safe | balanced | maximum | custom</span>
+<span class="m">backend ........</span> <span class="v">auto</span> <span class="m">→</span> <span class="v">vulkan</span>
+<span class="m">context ........</span> <span class="v">16K</span> <span class="m">(auto-fit to VRAM)</span>
+<span class="m">flash-attn .....</span> <span class="v">on</span>
+<span class="m">kv cache .......</span> <span class="v">f16</span>
+<span class="m">network ........</span> <span class="v">localhost only</span>
+<span class="m">api key ........</span> <span class="v">****************</span>  <span class="h">[show] [copy] [regen]</span>
+<span class="m">offline mode ...</span> <span class="v">off</span></pre></div></section>
+
+<div class="keys"><b>1-5</b> switch tab · <b>space</b> run/stop · data is simulated</div>
+
+<script>
+const T=[["home","status"],["models","models"],["chat","chat"],["perf","perf"],["set","config"]];
+tabs.innerHTML=T.map(([k,n],i)=>`<span class="tab ${i?'':'on'}" data-k="${k}">${i+1}:${n}</span>`).join("");
+function go(k){tabs.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.k===k));document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id===k))}
+tabs.onclick=e=>{if(e.target.dataset.k)go(e.target.dataset.k)};
+addEventListener("keydown",e=>{if(e.target.tagName==="INPUT")return;if(e.key>="1"&&e.key<="5")go(T[e.key-1][0]);if(e.key===" "){e.preventDefault();run.click()}});
+const f=(x,d=1)=>x.toFixed(d), V=x=>`<span class="v">${x}</span>`;
+function copyEp(){navigator.clipboard?.writeText(Mock.endpoint)}
+run.onclick=()=>{Mock.running=!Mock.running;paint(Mock.series.at(-1))};
+mt.innerHTML=Mock.models.map(m=>`<tr class="${m.def?'def':''}"><td>${V(m.name)}</td><td>${m.quant}</td><td>${V(m.size+" GB")}</td><td>${V(m.vram+" GB")}</td><td>${m.verdict=="ok"?V("✓ fits"):'<span class="h">✗ too large</span>'}</td></tr>`).join("");
+ht.innerHTML=Mock.history.map((h,i)=>{const p=Mock.history[i+1],d=p?(h.gen-p.gen)/p.gen*100:null;return`<tr><td>${h.when}</td><td>${V(h.gen)}</td><td>${V(h.pp)}</td><td>${V(h.w+" W")}</td><td>${V(h.t+"°C")}</td><td>${d==null?"–":V((d>=0?"+":"")+f(d)+"%")}</td><td class="m">${h.label}</td></tr>`}).join("");
+const kpi=(l,v,u)=>`<div class="kpi"><div class="l">${l}</div><div class="big">${v}<small> ${u}</small></div></div>`;
+const gauge=(l,p,txt)=>`<div class="row"><span>${l}</span><div class="gauge"><i style="width:${Math.max(0,Math.min(100,p))}%"></i></div>${V(txt)}</div>`;
+function paint(s){clock.textContent=new Date().toLocaleTimeString();
+ chip.textContent=Mock.running?"● RUNNING":"● STOPPED";chip.classList.toggle("on",Mock.running);run.textContent=Mock.running?"STOP":"RUN";
+ kpis.innerHTML=kpi("Speed",f(s.tps),"tok/s")+kpi("GPU load",f(s.util,0),"%")+kpi("VRAM",f(s.vramUsed),"/ 16 GB")+kpi("Power",f(s.power,0),"W");
+ sys.innerHTML=`<span class="m">gpu .........</span> ${V(Mock.gpu)}\n<span class="m">vram ........</span> ${V(Mock.vram+" GB")}\n<span class="m">backend .....</span> ${V(Mock.backend)} <span class="h">ok</span>\n<span class="m">model .......</span> ${V(Mock.model.name+" "+Mock.model.quant)}\n<span class="m">preflight ...</span> ${V("12.9 / 15.4 GB")} <span class="h">SAFE</span>`;
+ srv.innerHTML=`<span class="m">state .......</span> ${Mock.running?'<span class="h">RUNNING</span>':'stopped'}\n<span class="m">endpoint ....</span> ${V(Mock.endpoint)}\n<span class="m">context ....</span> ${V("16K")}   <span class="m">flash-attn</span> ${V("on")}\n<span class="m">auth ........</span> ${V("off (localhost)")}`;
+ gauges.innerHTML=gauge("gpu",s.util,f(s.util,0)+" %")+gauge("vram",s.vramUsed/16*100,f(s.vramUsed)+" / 16 GB")+gauge("speed",s.tps/60*100,f(s.tps)+" tok/s")+gauge("power",s.power/320*100,f(s.power,0)+" W")+gauge("temp",s.temp/110*100,f(s.temp,0)+" °C")+gauge("hotspot",s.hot/110*100,f(s.hot,0)+" °C");
+ pk.innerHTML=kpi("Prompt",f(s.pp,0),"tok/s")+kpi("Generation",f(s.tps),"tok/s")+kpi("Median TTFT",f(s.ttft,0),"ms")+kpi("Core clock",f(s.clk,0),"MHz")}
+const chat=[...Mock.chat];function draw(){cl.innerHTML=chat.map(([r,t])=>`<div><span class="${r=="user"?"u":"a"}">${r=="user"?"you":"llm"}&gt;</span> <span class="tx">${t.replace(/</g,"&lt;")}</span></div>`).join("<br>")+'<br><span class="cur"></span>';cl.scrollTop=1e9}
+function send(){if(!ci.value)return;chat.push(["user",ci.value],["assistant","(mock reply)"]);ci.value="";draw()}draw();
+Mock.start(paint);
+</script></body></html>

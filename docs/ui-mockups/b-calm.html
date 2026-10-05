@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>B · Calm</title><script src="mock.js"></script>
+<style>
+:root{--bg:#f6f5f2;--p:#fff;--b:#e6e3dc;--fg:#1d1d1b;--m:#8a867c;--a:#d6402f;--ok:#2f8f5b}
+@media(prefers-color-scheme:dark){:root{--bg:#161614;--p:#1f1f1c;--b:#2e2e2a;--fg:#ecebe6;--m:#8f8b80}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:15px/1.5 "Segoe UI",system-ui,sans-serif;display:flex;min-height:100vh}
+aside{width:200px;padding:28px 18px;border-right:1px solid var(--b)}aside h1{font-size:18px;margin:0 0 28px;font-weight:700}aside h1 span{color:var(--a)}
+aside a{display:block;padding:9px 12px;border-radius:8px;color:var(--m);cursor:pointer;margin-bottom:2px}aside a.on{background:var(--p);color:var(--fg);box-shadow:0 1px 3px #0001}
+main{flex:1;padding:44px 56px;max-width:900px}section{display:none}section.on{display:block}
+h2{font-size:30px;font-weight:600;margin:0 0 4px;letter-spacing:-.5px}.sub{color:var(--m);margin-bottom:34px}
+.hero{background:var(--p);border:1px solid var(--b);border-radius:18px;padding:40px;text-align:center}
+.status{display:inline-flex;align-items:center;gap:8px;color:var(--m);margin-bottom:18px}.dot{width:10px;height:10px;border-radius:50%;background:var(--m)}.dot.on{background:var(--ok)}
+.run{background:var(--a);color:#fff;border:0;border-radius:40px;padding:16px 70px;font-size:18px;font-weight:600;cursor:pointer}.run.stop{background:var(--fg);color:var(--bg)}
+.ep{margin-top:18px;font-family:Consolas,monospace;color:var(--m);cursor:copy}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:22px}.stat{background:var(--p);border:1px solid var(--b);border-radius:14px;padding:18px}
+.stat b{display:block;font-size:30px;font-weight:600;font-variant-numeric:tabular-nums}.stat span{color:var(--m);font-size:13px}
+.list{background:var(--p);border:1px solid var(--b);border-radius:14px}.li{display:flex;align-items:center;padding:16px 20px;border-bottom:1px solid var(--b);gap:16px}.li:last-child{border:0}.li div{flex:1}.li small{color:var(--m);display:block}
+.tag{padding:3px 10px;border-radius:20px;background:#2f8f5b22;color:var(--ok);font-size:13px}.tag.no{background:#d6402f22;color:var(--a)}
+button.b{border:1px solid var(--b);background:var(--p);color:var(--fg);padding:9px 18px;border-radius:10px;cursor:pointer;font:inherit}
+.chat{background:var(--p);border:1px solid var(--b);border-radius:14px;padding:22px;height:380px;overflow:auto;white-space:pre-wrap}
+.bub{max-width:80%;padding:10px 16px;border-radius:16px;margin-bottom:10px;background:var(--bg)}.bub.u{margin-left:auto;background:var(--a);color:#fff}
+input.t{width:100%;padding:14px 18px;border-radius:30px;border:1px solid var(--b);background:var(--p);color:var(--fg);font:inherit;margin-top:14px}
+</style></head><body>
+<aside><h1>Radeon<span>LLM</span></h1><div id="nav"></div></aside>
+<main>
+<section id="home" class="on"><h2>Ready when you are</h2><div class="sub" id="sub"></div>
+ <div class="hero"><div class="status"><span class="dot" id="dot"></span><span id="st">Stopped</span></div><br><button class="run" id="run">Run</button>
+ <div class="ep" id="ep" title="Click to copy"></div></div>
+ <div class="stats" id="stats"></div></section>
+<section id="models"><h2>Models</h2><div class="sub">GGUF files on this PC</div><div class="list" id="ml"></div><p><button class="b">Add model</button> <button class="b">Download</button></p></section>
+<section id="chat"><h2>Chat</h2><div class="sub">Uses the same API your apps use</div><div class="chat" id="cl"></div><input class="t" id="ci" placeholder="Ask anything…" onkeydown="if(event.key=='Enter')send()"></section>
+<section id="perf"><h2>Performance</h2><div class="sub">This session</div><div class="stats" id="pst"></div>
+ <h3 style="margin-top:34px">Benchmarks</h3><div class="list" id="hl"></div><p><button class="b">Run benchmark</button> <button class="b">Stress test</button></p></section>
+<section id="set"><h2>Settings</h2><div class="sub">Defaults are usually right</div><div class="list">
+ <div class="li"><div>Performance profile<small>Balanced fits context to your VRAM</small></div><select><option>Balanced</option><option>Safe</option><option>Maximum</option></select></div>
+ <div class="li"><div>Backend<small>Auto picked Vulkan for your GPU</small></div><select><option>Auto</option><option>CUDA</option><option>CPU</option></select></div>
+ <div class="li"><div>Share on local network<small>Requires an API key</small></div><input type="checkbox"></div></div></section>
+</main>
+<script>
+[["home","Home"],["models","Models"],["chat","Chat"],["perf","Performance"],["set","Settings"]].forEach(([k,n],i)=>nav.insertAdjacentHTML("beforeend",`<a data-k="${k}" class="${i?'':'on'}">${n}</a>`));
+nav.onclick=e=>{const k=e.target.dataset.k;if(!k)return;nav.querySelectorAll("a").forEach(a=>a.classList.toggle("on",a.dataset.k===k));document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id===k))};
+sub.textContent=`${Mock.model.name} ${Mock.model.quant} · ${Mock.gpu} · ${Mock.backend}`;ep.textContent=Mock.endpoint;
+ep.onclick=()=>{navigator.clipboard?.writeText(Mock.endpoint);ep.textContent="Copied";setTimeout(()=>ep.textContent=Mock.endpoint,1200)};
+ml.innerHTML=Mock.models.map(m=>`<div class="li"><div><b>${m.name}</b> ${m.quant}<small>${m.size} GB · needs ~${m.vram} GB VRAM</small></div><span class="tag ${m.verdict}">${m.verdict=="ok"?"Fits your GPU":"Too large"}</span></div>`).join("");
+hl.innerHTML=Mock.history.map(h=>`<div class="li"><div>${h.when}<small>${h.label}</small></div><div>${h.gen} tok/s</div><div>${h.w} W</div><div>${h.t}°C</div></div>`).join("");
+run.onclick=()=>{Mock.running=!Mock.running;paint(Mock.series.at(-1))};
+const st3=(a,b)=>`<div class="stat"><b>${a}</b><span>${b}</span></div>`;
+function paint(s){dot.className="dot"+(Mock.running?" on":"");st.textContent=Mock.running?"Running":"Stopped";run.textContent=Mock.running?"Stop":"Run";run.classList.toggle("stop",Mock.running);
+ stats.innerHTML=st3(s.tps.toFixed(1),"tokens / second")+st3(s.vramUsed.toFixed(1)+" GB","of 16 GB video memory")+st3(s.power.toFixed(0)+" W","at "+s.temp.toFixed(0)+"°C");
+ pst.innerHTML=st3(s.pp.toFixed(0),"prompt tok/s")+st3(s.ttft.toFixed(0)+" ms","time to first token")+st3(s.util.toFixed(0)+"%","GPU load")}
+const chat=[...Mock.chat];function drawChat(){cl.innerHTML=chat.map(([r,t])=>`<div class="bub ${r=="user"?"u":""}">${t.replace(/</g,"&lt;")}</div>`).join("");cl.scrollTop=1e9}
+function send(){if(!ci.value)return;chat.push(["user",ci.value],["assistant","(mock reply)"]);ci.value="";drawChat()}drawChat();
+Mock.start(paint);
+</script></body></html>

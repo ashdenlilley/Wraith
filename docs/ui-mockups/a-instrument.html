@@ -1,0 +1,66 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>A · Instrument</title><script src="mock.js"></script>
+<style>
+:root{--bg:#0d0f12;--p:#151922;--b:#232a36;--fg:#dfe5ee;--m:#7d8798;--a:#ff4d4d;--ok:#35d49a;--w:#f0b429;--c:#4db8ff}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:13px/1.4 "Segoe UI",system-ui,sans-serif}
+header{display:flex;align-items:center;gap:20px;padding:10px 18px;border-bottom:1px solid var(--b);background:var(--p)}
+.logo{font-weight:800;letter-spacing:.5px}.logo b{color:var(--a)}
+nav{display:flex;gap:2px;margin-left:12px}nav button{background:none;border:0;color:var(--m);padding:8px 14px;font:inherit;cursor:pointer;border-bottom:2px solid transparent}
+nav button.on{color:var(--fg);border-color:var(--a)}
+.pill{margin-left:auto;display:flex;gap:14px;align-items:center;color:var(--m)}.dot{width:9px;height:9px;border-radius:50%;background:var(--m);display:inline-block;margin-right:6px}
+.dot.on{background:var(--ok);box-shadow:0 0 8px var(--ok)}
+main{padding:16px 18px;max-width:1200px;margin:auto}section{display:none}section.on{display:block}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}}
+.card{background:var(--p);border:1px solid var(--b);border-radius:6px;padding:12px 14px}
+.lab{color:var(--m);font-size:11px;text-transform:uppercase;letter-spacing:1px}.val{font-size:28px;font-weight:700;font-variant-numeric:tabular-nums;margin:2px 0}
+.val small{font-size:13px;color:var(--m);font-weight:400}
+.bar{height:6px;background:#0a0c10;border-radius:3px;overflow:hidden;margin-top:6px}.bar i{display:block;height:100%;background:var(--c);transition:width .8s}
+.row{display:flex;gap:12px;margin-top:12px;flex-wrap:wrap}.row>.card{flex:1;min-width:280px}
+button.btn{background:#1d2431;border:1px solid var(--b);color:var(--fg);padding:7px 14px;border-radius:4px;cursor:pointer;font:inherit}
+button.run{background:var(--a);border:0;font-weight:800;font-size:15px;padding:11px 46px;border-radius:4px;color:#fff;cursor:pointer;letter-spacing:1px}
+button.run.stop{background:#2a3140}
+table{width:100%;border-collapse:collapse}td,th{padding:8px 10px;border-bottom:1px solid var(--b);text-align:left}th{color:var(--m);font-weight:500;font-size:11px;text-transform:uppercase}
+.ok{color:var(--ok)}.no{color:var(--a)}code{font-family:Consolas,monospace;color:var(--c)}
+.chat{height:340px;overflow:auto;background:#0a0c10;border:1px solid var(--b);border-radius:6px;padding:12px;white-space:pre-wrap}
+.msg{margin-bottom:12px}.msg b{color:var(--a)}input,select{background:#0a0c10;border:1px solid var(--b);color:var(--fg);padding:8px;border-radius:4px;font:inherit}
+</style></head><body>
+<header><div class="logo">Radeon<b>LLM</b></div>
+<nav id="nav"></nav>
+<div class="pill"><span><span class="dot" id="dot"></span><span id="st">Stopped</span></span><span id="ep"></span></div></header>
+<main>
+<section id="home" class="on">
+ <div class="row" style="margin-top:0"><div class="card" style="flex:2"><div class="lab">Model</div><div class="val" style="font-size:22px" id="mname"></div>
+  <div style="color:var(--m)" id="mpre"></div></div>
+  <div class="card" style="display:flex;align-items:center;justify-content:center"><button class="run" id="run">RUN</button></div></div>
+ <div class="grid" style="margin-top:12px" id="tiles"></div>
+ <div class="row"><div class="card"><div class="lab">Generation (tok/s)</div><div id="sp1" style="color:var(--ok)"></div></div>
+  <div class="card"><div class="lab">GPU power (W)</div><div id="sp2" style="color:var(--w)"></div></div>
+  <div class="card"><div class="lab">Temperature / hotspot (°C)</div><div id="sp3" style="color:var(--a)"></div></div></div>
+</section>
+<section id="models"><table><tr><th>Model</th><th>Quant</th><th>Size</th><th>Est. VRAM</th><th>RX 6900 XT</th><th></th></tr><tbody id="mt"></tbody></table>
+ <p><button class="btn">Add model</button> <button class="btn">Download…</button></p></section>
+<section id="chat"><div class="chat" id="cl"></div><p><input id="ci" style="width:80%" placeholder="Message…"> <button class="btn" onclick="sendChat()">Send</button></p></section>
+<section id="perf"><div class="grid" id="ptiles"></div>
+ <div class="card" style="margin-top:12px"><div class="lab">Benchmark history</div><table><tr><th>When</th><th>Gen tok/s</th><th>Prompt tok/s</th><th>Power</th><th>Temp</th><th>vs prev</th><th></th></tr><tbody id="ht"></tbody></table>
+ <p><button class="btn">Run benchmark</button> <button class="btn">Stress test</button> <button class="btn">Tune batch size</button></p></div></section>
+<section id="set"><div class="card"><div class="lab">Performance profile</div><p><select><option>Balanced</option><option>Safe</option><option>Maximum</option><option>Custom</option></select></p>
+ <div class="lab">Backend</div><p><select><option>Auto (Vulkan)</option><option>CUDA</option><option>ROCm</option><option>CPU</option></select></p>
+ <div class="lab">Network</div><p><label><input type="radio" name="n" checked> Localhost only</label> &nbsp; <label><input type="radio" name="n"> Local network (key required)</label></p></div></section>
+</main>
+<script>
+const tabs=[["home","Home"],["models","Models"],["chat","Chat"],["perf","Performance"],["set","Settings"]];
+nav.innerHTML=tabs.map(([k,n],i)=>`<button class="${i?'':'on'}" data-k="${k}">${n}</button>`).join("");
+nav.onclick=e=>{const k=e.target.dataset.k;if(!k)return;document.querySelectorAll("nav button").forEach(b=>b.classList.toggle("on",b.dataset.k===k));document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id===k))};
+mname.textContent=Mock.model.name+" "+Mock.model.quant;mpre.textContent="VRAM 12.9 / 15.4 GB · ctx 16K · flash-attn on · ✓ SAFE";ep.textContent=Mock.endpoint;
+mt.innerHTML=Mock.models.map(m=>`<tr><td>${m.name}${m.def?' <span class="lab">default</span>':''}</td><td>${m.quant}</td><td>${m.size} GB</td><td>${m.vram} GB</td><td class="${m.verdict}">${m.verdict=="ok"?"✓ Recommended":"✗ Too large"}</td><td><button class="btn">…</button></td></tr>`).join("");
+ht.innerHTML=Mock.history.map((h,i)=>{const p=Mock.history[i+1];return`<tr><td>${h.when}</td><td>${h.gen}</td><td>${h.pp}</td><td>${h.w} W</td><td>${h.t}°C</td><td class="${p&&h.gen>p.gen?'ok':''}">${p?((h.gen-p.gen)/p.gen*100).toFixed(1)+"%":"–"}</td><td>${h.label}</td></tr>`}).join("");
+function tile(l,v,u,pct){return`<div class="card"><div class="lab">${l}</div><div class="val">${v}<small> ${u}</small></div>${pct!=null?`<div class="bar"><i style="width:${pct}%"></i></div>`:""}</div>`}
+run.onclick=()=>{Mock.running=!Mock.running;paint(Mock.series.at(-1))};
+function paint(s){dot.className="dot"+(Mock.running?" on":"");st.textContent=Mock.running?"Running":"Stopped";run.textContent=Mock.running?"STOP":"RUN";run.classList.toggle("stop",Mock.running);
+ tiles.innerHTML=tile("GPU load",s.util.toFixed(0),"%",s.util)+tile("VRAM",s.vramUsed.toFixed(1),"/ 16 GB",s.vramUsed/16*100)+tile("Speed",s.tps.toFixed(1),"tok/s",s.tps/60*100)+tile("Power",s.power.toFixed(0),"W",s.power/320*100);
+ ptiles.innerHTML=tile("Prompt processing",s.pp.toFixed(0),"tok/s")+tile("Median TTFT",s.ttft.toFixed(0),"ms")+tile("Clock",s.clk.toFixed(0),"MHz")+tile("Hotspot",s.hot.toFixed(0),"°C");
+ sp1.innerHTML=Mock.spark("tps",360);sp2.innerHTML=Mock.spark("power",360);sp3.innerHTML=Mock.spark("temp",360)+Mock.spark("hot",360)}
+function drawChat(){cl.innerHTML=Mock.chat.map(([r,t])=>`<div class="msg"><b>${r=="user"?"You":"Assistant"}</b><br>${t.replace(/</g,"&lt;")}</div>`).join("");cl.scrollTop=1e9}
+function sendChat(){if(!ci.value)return;Mock.chat.push(["user",ci.value],["assistant","(mock reply)"]);ci.value="";drawChat()}drawChat();
+Mock.start(paint);
+</script></body></html>

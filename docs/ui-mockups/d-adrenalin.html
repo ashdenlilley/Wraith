@@ -1,0 +1,54 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>D · Adrenalin</title><script src="mock.js"></script>
+<style>
+:root{--bg:#101012;--p:#1a1a1e;--p2:#222228;--b:#2c2c33;--fg:#f2f2f4;--m:#8e8e99;--a:#ed1c24;--a2:#ff5a4d;--ok:#3ddc84}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(1200px 500px at 80% -10%,#3a0d10 0,#0000 60%),var(--bg);color:var(--fg);font:14px/1.45 "Segoe UI",system-ui,sans-serif}
+.wrap{max-width:1180px;margin:auto;padding:22px}
+header{display:flex;align-items:center;gap:26px;margin-bottom:22px}.logo{font-size:22px;font-weight:800;font-style:italic}.logo b{color:var(--a)}
+nav{display:flex;gap:6px;background:var(--p);padding:5px;border-radius:30px;border:1px solid var(--b)}nav button{background:none;border:0;color:var(--m);padding:8px 20px;border-radius:24px;font:inherit;cursor:pointer}
+nav button.on{background:linear-gradient(135deg,var(--a),var(--a2));color:#fff;font-weight:600}
+.live{margin-left:auto;display:flex;align-items:center;gap:8px;color:var(--m)}.dot{width:10px;height:10px;border-radius:50%;background:var(--m)}.dot.on{background:var(--ok);box-shadow:0 0 10px var(--ok)}
+section{display:none}section.on{display:block}
+.g{display:grid;gap:16px}.g2{grid-template-columns:1.2fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}@media(max-width:900px){.g2,.g3{grid-template-columns:1fr}}
+.card{background:linear-gradient(180deg,var(--p2),var(--p));border:1px solid var(--b);border-radius:16px;padding:20px}
+.lab{color:var(--m);font-size:12px;text-transform:uppercase;letter-spacing:1.2px;margin-bottom:8px}
+.gpu{display:flex;gap:20px;align-items:center}.ring{--v:0;width:150px;height:150px;border-radius:50%;background:conic-gradient(var(--a) calc(var(--v)*1%),#2a2a31 0);display:grid;place-items:center;flex:none}
+.ring div{width:118px;height:118px;border-radius:50%;background:var(--p);display:grid;place-items:center;text-align:center}.ring b{font-size:34px;line-height:1}.ring span{font-size:11px;color:var(--m)}
+.big{font-size:40px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.1}.big small{font-size:14px;color:var(--m);font-weight:400}
+.run{width:100%;margin-top:16px;background:linear-gradient(135deg,var(--a),var(--a2));border:0;color:#fff;font-size:18px;font-weight:700;padding:15px;border-radius:12px;cursor:pointer;letter-spacing:1px}.run.stop{background:#33333b}
+.model{display:flex;align-items:center;gap:16px;padding:14px;border:1px solid var(--b);border-radius:12px;margin-bottom:10px;background:var(--p)}.model.def{border-color:var(--a)}.model>div{flex:1}.model small{color:var(--m);display:block}
+.badge{padding:4px 12px;border-radius:20px;font-size:12px;background:#3ddc8422;color:var(--ok)}.badge.no{background:#ed1c2422;color:var(--a2)}
+.btn{background:var(--p2);border:1px solid var(--b);color:var(--fg);padding:9px 18px;border-radius:10px;cursor:pointer;font:inherit}
+.chat{height:360px;overflow:auto;white-space:pre-wrap}.bub{padding:10px 16px;border-radius:14px;margin-bottom:10px;max-width:80%;background:var(--p2)}.bub.u{margin-left:auto;background:linear-gradient(135deg,var(--a),var(--a2))}
+input.t{width:100%;padding:13px 18px;border-radius:12px;background:var(--p);border:1px solid var(--b);color:var(--fg);font:inherit;margin-top:12px}
+.cmp{display:grid;grid-template-columns:1fr auto auto;gap:6px 24px;align-items:center}.up{color:var(--ok)}.dn{color:var(--a2)}
+</style></head><body><div class="wrap">
+<header><div class="logo">Radeon<b>LLM</b></div><nav id="nav"></nav><div class="live"><span class="dot" id="dot"></span><span id="st">Stopped</span></div></header>
+<section id="home" class="on"><div class="g g2">
+ <div class="card"><div class="lab">Graphics</div><div class="gpu"><div class="ring" id="ring"><div><span>GPU LOAD<br><b id="rv">0</b></span></div></div>
+  <div><div style="font-size:18px;font-weight:600" id="gname"></div><div style="color:var(--m)" id="gsub"></div><br>
+  <div class="big" id="tps">0<small> tok/s</small></div></div></div></div>
+ <div class="card"><div class="lab">Model</div><div style="font-size:20px;font-weight:600" id="mn"></div><div style="color:var(--m)" id="mp"></div><div style="color:var(--m);margin-top:6px;font-family:Consolas,monospace" id="ep"></div><button class="run" id="run">START SERVER</button></div></div>
+ <div class="g g3" style="margin-top:16px" id="tiles"></div></section>
+<section id="models"><div class="card" id="ml"></div><p><button class="btn">Add model</button> <button class="btn">Download…</button></p></section>
+<section id="chat"><div class="card"><div class="chat" id="cl"></div><input class="t" id="ci" placeholder="Send a message…" onkeydown="if(event.key=='Enter')send()"></div></section>
+<section id="perf"><div class="g g3" id="pt"></div><div class="card" style="margin-top:16px"><div class="lab">Benchmark comparison</div><div class="cmp" id="cmp"></div><p><button class="btn">Run benchmark</button> <button class="btn">Stress test</button></p></div></section>
+<section id="set"><div class="card"><div class="lab">Performance profile</div><p><button class="btn">Safe</button> <button class="btn" style="border-color:var(--a)">Balanced</button> <button class="btn">Maximum</button> <button class="btn">Custom</button></p>
+ <div class="lab" style="margin-top:20px">Backend</div><p><select class="btn"><option>Auto (Vulkan)</option><option>CUDA</option><option>CPU</option></select></p></div></section>
+</div>
+<script>
+[["home","Dashboard"],["models","Models"],["chat","Chat"],["perf","Performance"],["set","Settings"]].forEach(([k,n],i)=>nav.insertAdjacentHTML("beforeend",`<button data-k="${k}" class="${i?'':'on'}">${n}</button>`));
+nav.onclick=e=>{const k=e.target.dataset.k;if(!k)return;nav.querySelectorAll("button").forEach(a=>a.classList.toggle("on",a.dataset.k===k));document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id===k))};
+gname.textContent=Mock.gpu;gsub.textContent=Mock.vram+" GB · "+Mock.backend;mn.textContent=Mock.model.name+" "+Mock.model.quant;mp.textContent="12.9 / 15.4 GB · ctx 16K · SAFE";ep.textContent=Mock.endpoint;
+ml.innerHTML=Mock.models.map(m=>`<div class="model ${m.def?'def':''}"><div><b>${m.name}</b> ${m.quant}<small>${m.size} GB on disk · ~${m.vram} GB VRAM</small></div><span class="badge ${m.verdict}">${m.verdict=="ok"?"Recommended":"Too large"}</span><button class="btn">⋯</button></div>`).join("");
+run.onclick=()=>{Mock.running=!Mock.running;paint(Mock.series.at(-1))};
+const tile=(l,v,u)=>`<div class="card"><div class="lab">${l}</div><div class="big">${v}<small> ${u}</small></div></div>`;
+function paint(s){dot.className="dot"+(Mock.running?" on":"");st.textContent=Mock.running?"Server running":"Server stopped";run.textContent=Mock.running?"STOP SERVER":"START SERVER";run.classList.toggle("stop",Mock.running);
+ ring.style.setProperty("--v",s.util);rv.textContent=s.util.toFixed(0)+"%";tps.innerHTML=s.tps.toFixed(1)+"<small> tok/s</small>";
+ tiles.innerHTML=tile("VRAM",s.vramUsed.toFixed(1),"/ 16 GB")+tile("Power",s.power.toFixed(0),"W")+tile("Temperature",s.temp.toFixed(0)+"°",`hotspot ${s.hot.toFixed(0)}°`);
+ pt.innerHTML=tile("Prompt processing",s.pp.toFixed(0),"tok/s")+tile("Median TTFT",s.ttft.toFixed(0),"ms")+tile("Core clock",s.clk.toFixed(0),"MHz")}
+const h=Mock.history;cmp.innerHTML=`<b></b><b>Current</b><b>Previous</b><span>Generation</span><span>${h[0].gen} tok/s</span><span>${h[1].gen}</span><span>Power</span><span>${h[0].w} W</span><span>${h[1].w} W</span><span>Temperature</span><span>${h[0].t}°C</span><span>${h[1].t}°C</span><b class="up">+${((h[0].gen-h[1].gen)/h[1].gen*100).toFixed(1)}% perf</b><b class="up">${((h[0].w-h[1].w)/h[1].w*100).toFixed(1)}% power</b><span></span>`;
+const chat=[...Mock.chat];function draw(){cl.innerHTML=chat.map(([r,t])=>`<div class="bub ${r=="user"?"u":""}">${t.replace(/</g,"&lt;")}</div>`).join("");cl.scrollTop=1e9}
+function send(){if(!ci.value)return;chat.push(["user",ci.value],["assistant","(mock reply)"]);ci.value="";draw()}draw();
+Mock.start(paint);
+</script></body></html>

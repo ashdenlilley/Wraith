@@ -1,0 +1,45 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>C · Console</title><script src="mock.js"></script>
+<style>
+:root{--bg:#0a0c08;--fg:#c9f5b5;--m:#5f7d54;--a:#ffb000;--r:#ff5f4d;--b:#1f2a1a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font:14px/1.5 Consolas,"Cascadia Mono",monospace;padding:18px}
+body:before{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,#0000 0 2px,#0002 2px 3px);pointer-events:none}
+.top{display:flex;gap:18px;border-bottom:1px solid var(--b);padding-bottom:8px;margin-bottom:14px;flex-wrap:wrap}
+.top b{color:var(--a)}.tab{cursor:pointer;color:var(--m)}.tab.on{color:var(--fg)}.tab.on:before{content:"["}.tab.on:after{content:"]"}
+section{display:none}section.on{display:block}pre{margin:0;white-space:pre-wrap}.m{color:var(--m)}.a{color:var(--a)}.r{color:var(--r)}
+.bar{display:inline-block;letter-spacing:-1px}.cur:after{content:"█";animation:bl 1s steps(2) infinite}@keyframes bl{50%{opacity:0}}
+button{background:none;border:1px solid var(--m);color:var(--fg);font:inherit;padding:2px 12px;cursor:pointer}button:hover{background:var(--fg);color:var(--bg)}
+input{background:none;border:0;border-bottom:1px solid var(--m);color:var(--fg);font:inherit;width:70%;outline:none}
+</style></head><body>
+<div class="top"><span><b>RADEONLLM</b> v0.2</span><span id="tabs"></span><span class="m" style="margin-left:auto" id="clock"></span></div>
+<section id="home" class="on"><pre id="homeTxt"></pre><p><button id="run">[ RUN ]</button></p></section>
+<section id="models"><pre id="modelsTxt"></pre><p><button>[ add ]</button> <button>[ download ]</button> <button>[ verify ]</button></p></section>
+<section id="chat"><pre id="chatTxt"></pre><p>&gt; <input id="ci" onkeydown="if(event.key=='Enter')send()" autofocus></p></section>
+<section id="perf"><pre id="perfTxt"></pre><p><button>[ benchmark ]</button> <button>[ stress 5m ]</button> <button>[ tune batch ]</button></p></section>
+<section id="set"><pre>
+profile ........ balanced    (safe | balanced | maximum | custom)
+backend ........ auto -> vulkan
+context ........ 16K (auto-fit)
+flash-attn ..... on
+kv cache ....... f16
+network ........ localhost only
+api key ........ ****************  [show] [copy] [regen]
+offline mode ... off
+</pre></section>
+<script>
+const T=[["home","status"],["models","models"],["chat","chat"],["perf","perf"],["set","config"]];
+tabs.innerHTML=T.map(([k,n],i)=>`<span class="tab ${i?'':'on'}" data-k="${k}">${n}</span>`).join(" ");
+tabs.onclick=e=>{const k=e.target.dataset.k;if(!k)return;tabs.querySelectorAll(".tab").forEach(t=>t.classList.toggle("on",t.dataset.k===k));document.querySelectorAll("section").forEach(s=>s.classList.toggle("on",s.id===k))};
+const bar=(p,w=28)=>{const n=Math.round(Math.max(0,Math.min(100,p))/100*w);return"█".repeat(n)+"░".repeat(w-n)};
+const f=(v,d=1)=>v.toFixed(d);
+run.onclick=()=>{Mock.running=!Mock.running;paint(Mock.series.at(-1))};
+modelsTxt.textContent="NAME                         QUANT    SIZE     VRAM     STATUS\n"+Mock.models.map(m=>`${(m.name+(m.def?" *":"")).padEnd(28)} ${m.quant.padEnd(8)} ${(m.size+" GB").padEnd(8)} ${(m.vram+" GB").padEnd(8)} ${m.verdict=="ok"?"ok":"TOO LARGE"}`).join("\n")+"\n\n* default";
+function paint(s){clock.textContent=new Date().toLocaleTimeString();run.textContent=Mock.running?"[ STOP ]":"[ RUN ]";
+ homeTxt.textContent=`gpu ........ ${Mock.gpu} (${Mock.vram} GB)\nbackend .... ${Mock.backend} ok\nmodel ...... ${Mock.model.name} ${Mock.model.quant}\npreflight .. 12.9 / 15.4 GB  SAFE\nserver ..... ${Mock.running?"RUNNING  "+Mock.endpoint:"stopped"}\n\n`+
+ `gpu   ${bar(s.util)} ${f(s.util,0).padStart(3)}%\nvram  ${bar(s.vramUsed/16*100)} ${f(s.vramUsed)} / 16 GB\nspeed ${bar(s.tps/60*100)} ${f(s.tps)} tok/s\npower ${bar(s.power/320*100)} ${f(s.power,0)} W   temp ${f(s.temp,0)}C  hot ${f(s.hot,0)}C`;
+ perfTxt.textContent=`SESSION\n  prompt processing   ${f(s.pp,0)} tok/s\n  generation          ${f(s.tps)} tok/s\n  median ttft         ${f(s.ttft,0)} ms\n  clocks              core ${f(s.clk,0)} MHz  mem ${s.mclk} MHz\n\nBENCHMARKS\n`+
+ Mock.history.map((h,i)=>{const p=Mock.history[i+1];return`  ${h.when.padEnd(12)} ${f(h.gen).padStart(5)} tok/s  ${String(h.w).padStart(3)} W  ${h.t}C  ${p?((h.gen-p.gen)/p.gen*100>=0?"+":"")+f((h.gen-p.gen)/p.gen*100)+"%":"   -"}  ${h.label}`}).join("\n")}
+const chat=[...Mock.chat];function draw(){chatTxt.innerHTML=chat.map(([r,t])=>`<span class="${r=="user"?"a":""}">${r=="user"?"you":"llm"}&gt;</span> ${t.replace(/</g,"&lt;")}\n`).join("\n")+'<span class="cur"></span>'}
+function send(){if(!ci.value)return;chat.push(["user",ci.value],["assistant","(mock reply)"]);ci.value="";draw()}draw();
+Mock.start(paint);
+</script></body></html>

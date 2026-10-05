@@ -38,6 +38,7 @@ public partial class MainWindow : Window
         _c.ServerFailed += f => Dispatcher.BeginInvoke(() => ShowError(f.Error, f.Repeated));
         _c.Library.Changed += () => Dispatcher.BeginInvoke(RefreshModels);
         _timer.Tick += (_, _) => Refresh();
+        PreviewKeyDown += OnPreviewKeyDown;
         _timer.Start();
         Closing += (_, _) => _chatCts?.Cancel();
         LoadSettingsUi();
@@ -55,6 +56,19 @@ public partial class MainWindow : Window
     }
 
     // ======================= HOME =======================
+
+    static void SetGauge(System.Windows.Controls.ProgressBar bar, TextBlock txt, double? pct, string text)
+    {
+        bar.Value = Math.Clamp(pct ?? 0, 0, 100);
+        txt.Text = text;
+    }
+
+    void OnPreviewKeyDown(object sender, KeyEventArgs e)
+    {
+        if (Keyboard.FocusedElement is TextBox) return;
+        int i = e.Key switch { Key.D1 or Key.NumPad1 => 0, Key.D2 or Key.NumPad2 => 1, Key.D3 or Key.NumPad3 => 2, Key.D4 or Key.NumPad4 => 3, Key.D5 or Key.NumPad5 => 4, _ => -1 };
+        if (i >= 0) { Tabs.SelectedIndex = i; e.Handled = true; }
+    }
 
     void Refresh()
     {
@@ -106,13 +120,24 @@ public partial class MainWindow : Window
 
         var t = _c.Monitor.Latest;
         var ses = _c.Tracker.Snapshot();
-        var sb = new StringBuilder();
-        sb.AppendLine($"GPU       {Fmt.Opt(t?.GpuUtil, "%")}");
-        sb.AppendLine($"VRAM      {(t?.VramUsedBytes is { } v ? Fmt.Bytes(v) : "n/a")}{(gpu is null ? "" : $" / {gpu.VramGb:0} GB")}");
-        sb.AppendLine($"Speed     {Fmt.Opt(ses.LastGenerationTps, "tok/s", "0.0")}");
-        sb.AppendLine($"Power     {Fmt.Opt(t?.PowerW, "W")}    Temp {Fmt.Opt(t?.TempC, "°C")}    Hotspot {Fmt.Opt(t?.HotspotC, "°C")}");
-        sb.Append($"Clocks    core {Fmt.Opt(t?.GpuClockMhz, "MHz")}    mem {Fmt.Opt(t?.MemClockMhz, "MHz")}");
-        LiveText.Text = sb.ToString();
+        double vramGb = (t?.VramUsedBytes ?? 0) / 1073741824.0, vramTotal = gpu?.VramGb ?? 16;
+        KpiTps.Text = (ses.LastGenerationTps ?? 0).ToString("0.0");
+        KpiGpu.Text = t?.GpuUtil is { } gu ? gu.ToString("0") : "n/a";
+        KpiVram.Text = t?.VramUsedBytes is null ? "n/a" : vramGb.ToString("0.0");
+        KpiVramUnit.Text = $" / {vramTotal:0} GB";
+        KpiPower.Text = t?.PowerW is { } pw ? pw.ToString("0") : "n/a";
+        SetGauge(GaugeGpu, TxtGpu, t?.GpuUtil, Fmt.Opt(t?.GpuUtil, "%"));
+        SetGauge(GaugeVram, TxtVram, t?.VramUsedBytes is null ? null : vramGb / vramTotal * 100, t?.VramUsedBytes is null ? "n/a" : $"{vramGb:0.0} / {vramTotal:0} GB");
+        SetGauge(GaugeTps, TxtTps, (ses.LastGenerationTps ?? 0) / 60 * 100, $"{ses.LastGenerationTps ?? 0:0.0} tok/s");
+        SetGauge(GaugePower, TxtPower, t?.PowerW / 320 * 100, Fmt.Opt(t?.PowerW, "W"));
+        SetGauge(GaugeTemp, TxtTemp, t?.TempC / 110 * 100, Fmt.Opt(t?.TempC, "°C"));
+        SetGauge(GaugeHot, TxtHot, t?.HotspotC / 110 * 100, Fmt.Opt(t?.HotspotC, "°C"));
+        ClockText.Text = $"core {Fmt.Opt(t?.GpuClockMhz, "MHz")}    mem {Fmt.Opt(t?.MemClockMhz, "MHz")}";
+
+        bool up = st == ServerState.Running;
+        ChipText.Text = st switch { ServerState.Running => "● RUNNING", ServerState.Starting => "● STARTING", ServerState.Recovering => "● RECOVERING", ServerState.Failed => "● FAILED", _ => "● STOPPED" };
+        ChipBorder.Background = up ? (System.Windows.Media.Brush)FindResource("Fg") : System.Windows.Media.Brushes.Transparent;
+        ChipText.Foreground = up ? (System.Windows.Media.Brush)FindResource("Bg") : (System.Windows.Media.Brush)FindResource(st == ServerState.Failed ? "Hi" : "Fg");
 
         RefreshPerformance(ses, t);
         RefreshApiTotals();
@@ -367,19 +392,23 @@ public partial class MainWindow : Window
     void RefreshPerformance(SessionStats s, TelemetrySample? t)
     {
         var plan = _c.LastPlan;
-        SessionText.Text =
-            $"Requests            {s.Requests}\n" +
-            $"Prompt tokens       {s.PromptTokens:N0}\n" +
-            $"Generated tokens    {s.GeneratedTokens:N0}\n" +
-            $"Prompt processing   {Fmt.Opt(s.PromptTps, "tok/s")}\n" +
-            $"Generation          {Fmt.Opt(s.GenerationTps, "tok/s", "0.0")}  (peak {Fmt.Opt(s.PeakTps, "", "0")}, min {Fmt.Opt(s.MinTps, "", "0")} per-second)\n" +
-            $"Median TTFT         {(s.MedianTtft is { } tt ? $"{tt * 1000:0} ms" : "n/a")}\n" +
-            $"GPU utilisation     {Fmt.Opt(t?.GpuUtil, "%")}\n" +
-            $"VRAM                {(t?.VramUsedBytes is { } v ? Fmt.Bytes(v) : "n/a")}\n" +
-            $"GPU power           {Fmt.Opt(t?.PowerW, "W")}\n" +
-            $"GPU temperature     {Fmt.Opt(t?.TempC, "°C")}    Hotspot {Fmt.Opt(t?.HotspotC, "°C")}\n" +
-            $"Context             {(plan is null ? "n/a" : $"{plan.Config.Context / 1024}K")}\n" +
-            $"Session duration    {s.Duration:mm\\:ss}";
+        var rows = new (string label, string value)[]
+        {
+            ("requests", $"{s.Requests}"),
+            ("prompt tokens", $"{s.PromptTokens:N0}"),
+            ("generated tokens", $"{s.GeneratedTokens:N0}"),
+            ("prompt processing", Fmt.Opt(s.PromptTps, "tok/s")),
+            ("generation", $"{Fmt.Opt(s.GenerationTps, "tok/s", "0.0")}  (peak {Fmt.Opt(s.PeakTps, "", "0")}, min {Fmt.Opt(s.MinTps, "", "0")} per-second)"),
+            ("median ttft", s.MedianTtft is { } tt ? $"{tt * 1000:0} ms" : "n/a"),
+            ("gpu utilisation", Fmt.Opt(t?.GpuUtil, "%")),
+            ("vram", t?.VramUsedBytes is { } v ? Fmt.Bytes(v) : "n/a"),
+            ("gpu power", Fmt.Opt(t?.PowerW, "W")),
+            ("temperature", $"{Fmt.Opt(t?.TempC, "°C")}   hotspot {Fmt.Opt(t?.HotspotC, "°C")}"),
+            ("context", plan is null ? "n/a" : $"{plan.Config.Context / 1024}K"),
+            ("session duration", $"{s.Duration:mm\\:ss}"),
+        };
+        SessionLabels.Text = string.Join(Environment.NewLine, rows.Select(r => r.label));
+        SessionValues.Text = string.Join(Environment.NewLine, rows.Select(r => r.value));
     }
 
     DateTime _totalsAt;
@@ -390,10 +419,14 @@ public partial class MainWindow : Window
         try
         {
             var a = _c.Store.ApiTotalsAllTime();
-            ApiTotalsText.Text =
-                $"Requests            {a.Requests:N0}\nInput tokens        {a.InputTokens:N0}\nOutput tokens       {a.OutputTokens:N0}\n" +
-                $"Prompt processing   {Fmt.Opt(a.PromptTps, "tok/s")}\nGeneration          {Fmt.Opt(a.GenerationTps, "tok/s", "0.0")}\n" +
-                $"Median TTFT         {(a.MedianTtft is { } m ? $"{m * 1000:0} ms" : "n/a")}";
+            var rows = new (string label, string value)[]
+            {
+                ("requests", $"{a.Requests:N0}"), ("input tokens", $"{a.InputTokens:N0}"), ("output tokens", $"{a.OutputTokens:N0}"),
+                ("prompt processing", Fmt.Opt(a.PromptTps, "tok/s")), ("generation", Fmt.Opt(a.GenerationTps, "tok/s", "0.0")),
+                ("median ttft", a.MedianTtft is { } m ? $"{m * 1000:0} ms" : "n/a"),
+            };
+            ApiLabels.Text = string.Join(Environment.NewLine, rows.Select(r => r.label));
+            ApiValues.Text = string.Join(Environment.NewLine, rows.Select(r => r.value));
         }
         catch { }
     }
