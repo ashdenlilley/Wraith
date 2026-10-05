@@ -32,6 +32,25 @@ public sealed class ModelDownloader
         throw new ArgumentException("Enter a URL or owner/repo/file.gguf.");
     }
 
+    /// <summary>Hugging Face exposes the LFS sha256 in X-Linked-ETag on the first (pre-redirect) response.</summary>
+    public async Task<string?> FetchExpectedSha256Async(Uri url, CancellationToken ct)
+    {
+        if (!url.Host.Equals("huggingface.co", StringComparison.OrdinalIgnoreCase)) return null;
+        try
+        {
+            using var noRedirect = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false });
+            noRedirect.DefaultRequestHeaders.UserAgent.ParseAdd("RadeonLLM/0.1");
+            using var resp = await noRedirect.SendAsync(new HttpRequestMessage(HttpMethod.Head, url), ct);
+            if (resp.Headers.TryGetValues("X-Linked-ETag", out var v))
+            {
+                var etag = v.First().Trim('"', ' ');
+                if (etag.Length == 64 && etag.All(Uri.IsHexDigit)) return etag.ToLowerInvariant();
+            }
+        }
+        catch (HttpRequestException) { }
+        return null;
+    }
+
     public async Task<ModelEntry> DownloadAsync(string input, IProgress<(long done, long total)>? progress = null, CancellationToken ct = default)
     {
         var url = ResolveUrl(input);
@@ -43,6 +62,7 @@ public sealed class ModelDownloader
         var part = final + ".part";
         if (File.Exists(final)) throw new IOException("A model file with that name already exists.");
 
+        var expectedSha = await FetchExpectedSha256Async(url, ct);
         long existing = File.Exists(part) ? new FileInfo(part).Length : 0;
         using var req = new HttpRequestMessage(HttpMethod.Get, url);
         if (existing > 0) req.Headers.Range = new RangeHeaderValue(existing, null);
@@ -67,7 +87,16 @@ public sealed class ModelDownloader
             }
         }
         if (!GgufReader.HasMagic(part)) { File.Delete(part); throw new InvalidDataException("Downloaded file is not a GGUF."); }
+        string hash;
+        await using (var fs = File.OpenRead(part))
+            hash = Convert.ToHexString(await System.Security.Cryptography.SHA256.HashDataAsync(fs, ct)).ToLowerInvariant();
+        if (expectedSha is not null && hash != expectedSha)
+        {
+            File.Delete(part);
+            throw new InvalidDataException("Download failed integrity check (SHA-256 does not match the published value). Try again.");
+        }
+        _log.Info(expectedSha is null ? $"{name}: no published checksum to compare; recorded sha256 {hash[..12]}..." : $"{name}: sha256 verified.");
         File.Move(part, final);
-        return _library.RegisterManaged(final);
+        return _library.RegisterManaged(final, hash);
     }
 }

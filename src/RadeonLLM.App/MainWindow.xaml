@@ -126,6 +126,11 @@
                     </StackPanel>
                     <TextBlock x:Name="BenchText" FontFamily="Consolas" FontSize="14" LineHeight="22" Margin="0,8,0,0"/>
 
+                    <TextBlock Text="BATCH TUNING" Style="{StaticResource H}"/>
+                    <TextBlock Style="{StaticResource Muted}" Text="Tries several batch sizes with a long prompt (restarts the server several times) and saves the fastest as a Custom profile."/>
+                    <Button x:Name="TuneBtn" Content="Tune Batch Size" Click="Tune_Click" Margin="0,8,0,0" HorizontalAlignment="Left"/>
+                    <TextBlock x:Name="TuneText" FontFamily="Consolas" FontSize="13" LineHeight="20" Margin="0,8,0,0"/>
+
                     <TextBlock Text="HISTORY" Style="{StaticResource H}"/>
                     <TextBlock x:Name="HistoryText" FontFamily="Consolas" FontSize="13" LineHeight="20"/>
 
@@ -160,6 +165,10 @@
                         <TextBlock Text="GPU layers (-1 = automatic maximum)" Style="{StaticResource H}"/>
                         <TextBox x:Name="NglBox" Width="120" HorizontalAlignment="Left" LostFocus="Settings_Changed"/>
                         <CheckBox x:Name="FaBox" Content="Flash Attention" Click="Settings_Changed" Margin="0,8,0,0"/>
+                        <TextBlock Text="KV cache (q8_0 needs Flash Attention)" Style="{StaticResource H}"/>
+                        <ComboBox x:Name="KvBox" SelectionChanged="Settings_Changed" Width="120" HorizontalAlignment="Left">
+                            <ComboBoxItem Content="f16"/><ComboBoxItem Content="q8_0"/>
+                        </ComboBox>
                     </StackPanel>
                     <TextBlock x:Name="PlanText" Style="{StaticResource Muted}" Margin="0,8,0,0"/>
 

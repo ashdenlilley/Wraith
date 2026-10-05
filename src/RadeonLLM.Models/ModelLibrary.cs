@@ -87,7 +87,12 @@ public sealed partial class ModelLibrary
     }
 
     /// <summary>Registers a GGUF already in the managed folder (used after download).</summary>
-    public ModelEntry RegisterManaged(string path) => Register(path, true, GgufReader.Read(path));
+    public ModelEntry RegisterManaged(string path, string? sha256 = null)
+    {
+        var e = Register(path, true, GgufReader.Read(path));
+        if (sha256 is not null) { lock (_lock) { e.Sha256 = sha256; Save(); } }
+        return e;
+    }
 
     ModelEntry Register(string path, bool managed, GgufMetadata meta)
     {

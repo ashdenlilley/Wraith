@@ -1,3 +1,4 @@
+using System.Net.Http;
 using RadeonLLM.Core;
 using RadeonLLM.Runtime;
 using Xunit;
@@ -54,9 +55,9 @@ public class LiveEndToEndTests
         await using var api = new RadeonLLM.Api.ApiHost(logs.Api, tracker);
         try
         {
-            await server.StartAsync(rt.ServerExe!, plan.Config);
+            await server.StartAsync(rt.ServerExe!, plan.Config with { ApiKey = "up-key" });
             Assert.Equal(ServerState.Running, server.State);
-            await api.StartAsync(new RadeonLLM.Api.ApiOptions("127.0.0.1", 18181, 18182, false, null));
+            await api.StartAsync(new RadeonLLM.Api.ApiOptions("127.0.0.1", 18181, 18182, false, null, "up-key"));
             tracker.Begin(model.Id, model.Quantization, plan.Config.Context, dev.Name, rt.Version);
 
             var client = new RadeonLLM.Analytics.LocalApiClient("http://127.0.0.1:18181/v1", null);
@@ -83,5 +84,46 @@ public class LiveEndToEndTests
         }
         finally { await server.StopAsync(); }
         Assert.Equal(ServerState.Stopped, server.State);
+    }
+
+    [Fact]
+    public async Task RecoversAfterServerProcessIsKilledAndRunsStressTest()
+    {
+        var gguf = Environment.GetEnvironmentVariable("RADEONLLM_TEST_GGUF");
+        if (Environment.GetEnvironmentVariable("RADEONLLM_LIVE") != "1" || gguf is null) return;
+
+        var paths = new AppPaths(Directory.CreateTempSubdirectory().FullName); paths.EnsureCreated();
+        var settings = new SettingsStore(paths);
+        var logs = new Logs(paths);
+        var rt = new RuntimeManager(paths, logs.Runtime, new NetworkGate(settings));
+        await rt.InstallAsync(await rt.GetLatestAsync());
+        var dev = (await rt.ListDevicesAsync()).First(d => d.Name.Contains("6900"));
+        var lib = new RadeonLLM.Models.ModelLibrary(paths);
+        var model = await lib.ImportAsync(gguf, copy: false);
+        var plan = RadeonLLM.Inference.ConfigBuilder.Build(settings.Current, model, dev.FreeMiB * 1048576L, 16, false, dev.Id);
+
+        using var store = new RadeonLLM.Analytics.AnalyticsStore(paths);
+        using var server = new RadeonLLM.Inference.LlamaServerManager(logs.Runtime, logs.Inference);
+        var recovered = new TaskCompletionSource();
+        int readyCount = 0;
+        server.Ready += () => { if (++readyCount == 2) recovered.TrySetResult(); };
+        var cfg = plan.Config with { Port = 18192, ApiKey = "k" };
+        try
+        {
+            await server.StartAsync(rt.ServerExe!, cfg);
+            // kill the child hard, as a GPU driver reset would
+            foreach (var p in System.Diagnostics.Process.GetProcessesByName("llama-server")) p.Kill(true);
+            await Task.WhenAny(recovered.Task, Task.Delay(TimeSpan.FromSeconds(90)));
+            Assert.True(recovered.Task.IsCompletedSuccessfully, "server did not auto-recover");
+            Assert.Equal(ServerState.Running, server.State);
+            Assert.Equal(1, server.CrashCount);
+
+            var client = new RadeonLLM.Analytics.LocalApiClient("http://127.0.0.1:18192/v1", "k");
+            var r = await RadeonLLM.Analytics.StressTester.RunAsync(client, store, null, server, model.Id, TimeSpan.FromSeconds(8));
+            Console.WriteLine($"STRESS tokens={r.Tokens} avg={r.AvgTps:0.0} errors={r.Errors} crashes={r.Crashes} pass={r.Passed}");
+            Assert.True(r.Passed);
+            Assert.True(r.Tokens > 0);
+        }
+        finally { await server.StopAsync(); }
     }
 }

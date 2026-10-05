@@ -240,8 +240,7 @@ public partial class MainWindow : Window
 
     async void DownloadModel_Click(object sender, RoutedEventArgs e)
     {
-        var input = InputDialog.Ask(this, "Download model",
-            "Paste a .gguf URL, or use Hugging Face shorthand:\nowner/repo/file.gguf");
+        var input = DownloadDialog.Ask(this);
         if (string.IsNullOrWhiteSpace(input)) return;
         ModelsBar.Visibility = Visibility.Visible;
         try
@@ -415,6 +414,20 @@ public partial class MainWindow : Window
         finally { BenchBtn.IsEnabled = true; }
     }
 
+    async void Tune_Click(object sender, RoutedEventArgs e)
+    {
+        TuneBtn.IsEnabled = false;
+        try
+        {
+            var (results, best) = await _c.TuneBatchAsync(new Progress<string>(s => TuneText.Text = s));
+            TuneText.Text = string.Join(Environment.NewLine, results.Select(r => $"batch {r.Batch,5} / ubatch {r.UBatch,5}   prompt {r.PromptTps,7:0} tok/s   gen {r.GenTps,6:0.0} tok/s"))
+                + $"{Environment.NewLine}{Environment.NewLine}Best: {best.Batch}/{best.UBatch}. Saved as Custom profile; server restored.";
+            LoadSettingsUi();
+        }
+        catch (Exception ex) { TuneText.Text = "Tuning failed: " + ex.Message; }
+        finally { TuneBtn.IsEnabled = true; }
+    }
+
     void RefreshHistory()
     {
         try
@@ -469,7 +482,7 @@ public partial class MainWindow : Window
         var was = _loading; _loading = true;
         var s = _c.Settings;
         ProfileBox.SelectedIndex = (int)s.Profile;
-        CtxBox.Text = s.ContextSize.ToString(); NglBox.Text = s.GpuLayers.ToString(); FaBox.IsChecked = s.FlashAttention;
+        CtxBox.Text = s.ContextSize.ToString(); NglBox.Text = s.GpuLayers.ToString(); FaBox.IsChecked = s.FlashAttention; KvBox.SelectedIndex = s.KvCacheType == "q8_0" ? 1 : 0;
         ApiEnabledBox.IsChecked = s.ApiEnabled; PortBox.Text = s.Port.ToString();
         LocalOnlyRadio.IsChecked = !s.LanAccess; LanRadio.IsChecked = s.LanAccess;
         LocalKeyBox.IsChecked = s.RequireApiKeyOnLocalhost; OfflineBox.IsChecked = s.OfflineMode;
@@ -486,6 +499,7 @@ public partial class MainWindow : Window
         if (int.TryParse(CtxBox.Text, out var ctx) && ctx >= 512) s.ContextSize = ctx;
         if (int.TryParse(NglBox.Text, out var ngl) && ngl >= -1) s.GpuLayers = ngl;
         s.FlashAttention = FaBox.IsChecked == true;
+        s.KvCacheType = KvBox.SelectedIndex == 1 ? "q8_0" : "f16";
         s.ApiEnabled = ApiEnabledBox.IsChecked == true;
         if (int.TryParse(PortBox.Text, out var port) && port is > 1023 and < 65536 && port != s.InternalPort) s.Port = port;
         s.RequireApiKeyOnLocalhost = LocalKeyBox.IsChecked == true;
@@ -647,5 +661,36 @@ public static class InputDialog
         ok.Click += (_, _) => win.DialogResult = true;
         win.Loaded += (_, _) => { box.Focus(); box.SelectAll(); };
         return win.ShowDialog() == true ? box.Text.Trim() : null;
+    }
+}
+
+/// <summary>Pick a curated model or enter a custom URL / owner/repo/file.gguf.</summary>
+public static class DownloadDialog
+{
+    public static string? Ask(Window owner)
+    {
+        var combo = new ComboBox { Margin = new Thickness(0, 8, 0, 12) };
+        foreach (var e in ModelCatalog.Entries)
+            combo.Items.Add(new ComboBoxItem { Content = $"{e.Name}   ~{e.SizeGb:0.0} GB   {e.Note}", Tag = e.Source });
+        combo.SelectedIndex = 0;
+        var box = new TextBox { Margin = new Thickness(0, 8, 0, 14) };
+        var ok = new Button { Content = "Download", IsDefault = true, Padding = new Thickness(24, 6, 24, 6) };
+        var cancel = new Button { Content = "Cancel", IsCancel = true };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        row.Children.Add(cancel); row.Children.Add(ok);
+        var panel = new StackPanel { Margin = new Thickness(18) };
+        panel.Children.Add(new TextBlock { Text = "Recommended for 16 GB cards:" });
+        panel.Children.Add(combo);
+        panel.Children.Add(new TextBlock { Text = "Or a custom .gguf URL / owner/repo/file.gguf (overrides the choice above):" });
+        panel.Children.Add(box); panel.Children.Add(row);
+        var win = new Window
+        {
+            Title = "Download model", Content = panel, Owner = owner, Width = 620, SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, ResizeMode = ResizeMode.NoResize,
+            Background = (System.Windows.Media.Brush)Application.Current.FindResource("Bg")
+        };
+        ok.Click += (_, _) => win.DialogResult = true;
+        if (win.ShowDialog() != true) return null;
+        return string.IsNullOrWhiteSpace(box.Text) ? (string)((ComboBoxItem)combo.SelectedItem).Tag : box.Text.Trim();
     }
 }

@@ -33,6 +33,18 @@ public sealed class AppController : IDisposable
     public bool SafeMode { get; private set; }
     public RuntimeDevice? Device { get; private set; }
 
+    int _internalPort;
+    string _internalKey = "";
+
+    static int FreePort()
+    {
+        var l = new global::System.Net.Sockets.TcpListener(global::System.Net.IPAddress.Loopback, 0);
+        l.Start();
+        var p = ((global::System.Net.IPEndPoint)l.LocalEndpoint).Port;
+        l.Stop();
+        return p;
+    }
+
     public event Action<ServerFailure>? ServerFailed;
     public event Action? StateChanged;
 
@@ -114,7 +126,11 @@ public sealed class AppController : IDisposable
         var model = SelectedModel ?? throw new InvalidOperationException("Import or download a model first.");
         if (!File.Exists(model.Path)) throw new FileNotFoundException("Model file is missing.", model.Path);
 
+        // llama-server is only reachable from this app: random loopback port + per-run key.
+        _internalPort = Settings.InternalPort > 0 ? Settings.InternalPort : FreePort();
+        _internalKey = Convert.ToHexString(global::System.Security.Cryptography.RandomNumberGenerator.GetBytes(16));
         var plan = PlanFor(model);
+        plan = plan with { Config = plan.Config with { Port = _internalPort, ApiKey = _internalKey } };
         LastPlan = plan;
         Logs.App.Info($"Plan: {plan.Config.Describe()} est {Fmt.Bytes(plan.Preflight.TotalBytes)} of {Fmt.Bytes(plan.Preflight.AvailableBytes)}{(plan.Note is null ? "" : " - " + plan.Note)}");
 
@@ -128,7 +144,7 @@ public sealed class AppController : IDisposable
     {
         if (!Settings.ApiEnabled) { await Api.StopAsync(); return; }
         string? key = Settings.AuthRequired ? Keys.GetOrCreate() : Keys.Get();
-        await Api.StartAsync(new ApiOptions(Settings.BindAddress, Settings.Port, Settings.InternalPort, Settings.AuthRequired, key));
+        await Api.StartAsync(new ApiOptions(Settings.BindAddress, Settings.Port, _internalPort, Settings.AuthRequired, key, _internalKey));
     }
 
     public async Task StopAsync()
@@ -164,6 +180,53 @@ public sealed class AppController : IDisposable
         Settings.Profile = PerformanceProfile.Custom;
         Settings.GpuLayers = Math.Max(0, (int)(cur * 0.8));
         SettingsStore.Save();
+    }
+
+    public sealed record TuneResult(int Batch, int UBatch, double PromptTps, double GenTps);
+
+    static readonly string LongPrompt = string.Join(' ', Enumerable.Repeat(
+        "Throughput depends on how the prompt is split into batches that the GPU processes in parallel.", 110));
+
+    /// <summary>
+    /// Sweeps batch/ubatch by restarting the server with each pair and timing a long prompt.
+    /// Talks to llama-server directly (not the public API) so session analytics stay clean.
+    /// Saves the fastest pair as a Custom profile and restores the original server config.
+    /// </summary>
+    public async Task<(IReadOnlyList<TuneResult> Results, TuneResult Best)> TuneBatchAsync(IProgress<string> progress, CancellationToken ct = default)
+    {
+        if (Server.State != ServerState.Running || LastPlan is not { } plan || Runtime.ServerExe is not { } exe)
+            throw new InvalidOperationException("Start the server first.");
+        var baseCfg = plan.Config;
+        var results = new List<TuneResult>();
+        var pairs = new (int b, int ub)[] { (512, 256), (512, 512), (1024, 512), (2048, 512), (2048, 1024), (4096, 1024) };
+        var client = new LocalApiClient($"http://127.0.0.1:{_internalPort}/v1", _internalKey);
+        try
+        {
+            int i = 0;
+            foreach (var (b, ub) in pairs)
+            {
+                ct.ThrowIfCancellationRequested();
+                progress.Report($"Testing batch {b} / ubatch {ub}  ({++i}/{pairs.Length})...");
+                await Server.StartAsync(exe, baseCfg with { Batch = b, UBatch = ub }, ct);
+                await client.CompleteAsync(baseCfg.Alias, "warm up", 8, ct);
+                var runs = new List<CompletionTimings>();
+                for (int k = 0; k < 2; k++) runs.Add(await client.CompleteAsync(baseCfg.Alias, LongPrompt, 64, ct));
+                results.Add(new TuneResult(b, ub, runs.Average(r => r.PromptTps), runs.Average(r => r.GenerationTps)));
+            }
+        }
+        finally
+        {
+            try { await Server.StartAsync(exe, baseCfg, CancellationToken.None); } catch (Exception ex) { Logs.App.Error("Restoring server after tune failed", ex); }
+        }
+        var best = results.OrderByDescending(r => r.PromptTps).First();
+        Settings.Profile = PerformanceProfile.Custom;
+        Settings.ContextSize = baseCfg.Context;
+        Settings.FlashAttention = baseCfg.FlashAttention;
+        Settings.KvCacheType = baseCfg.KvCacheType;
+        Settings.BatchSize = best.Batch; Settings.UBatchSize = best.UBatch;
+        SettingsStore.Save();
+        Logs.App.Info($"Batch tune: best {best.Batch}/{best.UBatch} at {best.PromptTps:0} prompt tok/s");
+        return (results, best);
     }
 
     public LocalApiClient CreateApiClient() =>

@@ -7,7 +7,7 @@ manages a pinned llama.cpp Vulkan `llama-server.exe` and exposes an OpenAI-compa
 
 ```powershell
 dotnet build                                  # all projects
-dotnet test tests/RadeonLLM.Tests             # 26 unit/integration tests
+dotnet test tests/RadeonLLM.Tests             # 35 tests (unit, API proxy, WPF smoke)
 dotnet publish src/RadeonLLM.App -c Release -o publish   # self-contained single-file publish/RadeonLLM.exe
 ```
 

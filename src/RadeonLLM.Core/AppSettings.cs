@@ -14,15 +14,19 @@ public sealed class AppSettings
     public int GpuLayers { get; set; } = -1;
     /// <summary>0 = automatic.</summary>
     public int BatchSize { get; set; }
+    /// <summary>0 = automatic (512, capped by batch).</summary>
+    public int UBatchSize { get; set; }
     public bool FlashAttention { get; set; } = true;
+    /// <summary>"f16" or "q8_0" (q8_0 halves KV memory; needs Flash Attention). Custom profile only.</summary>
+    public string KvCacheType { get; set; } = "f16";
     /// <summary>0 = automatic.</summary>
     public int Threads { get; set; }
 
     public bool ApiEnabled { get; set; } = true;
     public bool LanAccess { get; set; }
     public int Port { get; set; } = 8080;
-    /// <summary>Loopback port used by the managed llama-server behind the API front door.</summary>
-    public int InternalPort { get; set; } = 18080;
+    /// <summary>0 = pick a free loopback port on every start (default).</summary>
+    public int InternalPort { get; set; }
     /// <summary>Key is enforced on localhost only if this is true; always enforced when LanAccess.</summary>
     public bool RequireApiKeyOnLocalhost { get; set; }
 

@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.*" />
@@ -18,5 +19,6 @@
     <ProjectReference Include="..\..\src\RadeonLLM.Analytics\RadeonLLM.Analytics.csproj" />
     <ProjectReference Include="..\..\src\RadeonLLM.Api\RadeonLLM.Api.csproj" />
     <ProjectReference Include="..\..\src\RadeonLLM.Security\RadeonLLM.Security.csproj" />
+    <ProjectReference Include="..\..\src\RadeonLLM.App\RadeonLLM.App.csproj" />
   </ItemGroup>
 </Project>

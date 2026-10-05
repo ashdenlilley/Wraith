@@ -11,7 +11,7 @@ using RadeonLLM.Core;
 
 namespace RadeonLLM.Api;
 
-public sealed record ApiOptions(string BindAddress, int Port, int UpstreamPort, bool AuthRequired, string? ApiKey);
+public sealed record ApiOptions(string BindAddress, int Port, int UpstreamPort, bool AuthRequired, string? ApiKey, string? UpstreamKey = null);
 
 /// <summary>
 /// Public OpenAI-compatible front door. Transparently proxies /v1/* to the managed llama-server,
@@ -105,6 +105,9 @@ public sealed class ApiHost : IAsyncDisposable
                 || h.Key.StartsWith("Content-", StringComparison.OrdinalIgnoreCase)) continue;
             msg.Headers.TryAddWithoutValidation(h.Key, h.Value.ToArray());
         }
+
+        if (_opt.UpstreamKey is not null)
+            msg.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _opt.UpstreamKey);
 
         HttpResponseMessage resp;
         try

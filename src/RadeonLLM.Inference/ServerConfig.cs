@@ -5,7 +5,7 @@ namespace RadeonLLM.Inference;
 
 public sealed record ServerConfig(
     string ModelPath, string Alias, int Context, int GpuLayers, int Batch, int UBatch,
-    bool FlashAttention, int Threads, string KvCacheType, int Port, string? DeviceId = null)
+    bool FlashAttention, int Threads, string KvCacheType, int Port, string? DeviceId = null, string? ApiKey = null)
 {
     public string Describe() =>
         $"ctx={Context} ngl={(GpuLayers >= 999 ? "max" : GpuLayers)} batch={Batch} fa={(FlashAttention ? "on" : "off")} kv={KvCacheType}";
@@ -19,6 +19,7 @@ public sealed record ServerConfig(
             "--flash-attn", FlashAttention ? "on" : "off", "--jinja", "--no-webui"
         };
         if (DeviceId is not null) { a.Add("--device"); a.Add(DeviceId); a.Add("-sm"); a.Add("none"); }
+        if (ApiKey is not null) { a.Add("--api-key"); a.Add(ApiKey); }
         if (Threads > 0) { a.Add("-t"); a.Add(Threads.ToString()); }
         if (KvCacheType != "f16") { a.Add("-ctk"); a.Add(KvCacheType); a.Add("-ctv"); a.Add(KvCacheType); }
         return a;
@@ -43,9 +44,10 @@ public static class ConfigBuilder
             case PerformanceProfile.Safe:
                 ctx = 4096; fa = false; batch = 512; layerFraction = safeMode ? 0.8 : 1.0; break;
             case PerformanceProfile.Maximum:
-                ctx = 32768; fa = true; break;
+                ctx = 32768; fa = true; kv = "q8_0"; break;
             case PerformanceProfile.Custom:
-                ctx = s.ContextSize; fa = s.FlashAttention; batch = s.BatchSize > 0 ? s.BatchSize : 2048; break;
+                ctx = s.ContextSize; fa = s.FlashAttention; batch = s.BatchSize > 0 ? s.BatchSize : 2048; if (s.UBatchSize > 0) ubatch = s.UBatchSize;
+                kv = fa && s.KvCacheType == "q8_0" ? "q8_0" : "f16"; break;
             default:
                 ctx = 16384; fa = true; break;
         }
@@ -54,7 +56,8 @@ public static class ConfigBuilder
             layerFraction = Math.Min(1.0, (double)s.GpuLayers / bl);
         ubatch = Math.Min(ubatch, batch);
 
-        var pre = VramPreflight.Estimate(m, ctx, availableVramBytes, layerFraction, batch);
+        double kvBytes = kv == "q8_0" ? 1.0625 : 2.0;
+        var pre = VramPreflight.Estimate(m, ctx, availableVramBytes, layerFraction, batch, kvBytes);
         bool adjusted = false; string? note = null;
 
         // Maximum and Custom are explicit user intent: warn only. Safe and Balanced auto-fit (spec section 16).
@@ -71,7 +74,7 @@ public static class ConfigBuilder
                 note += $" GPU layers reduced to {rl}/{total}.";
             }
             if (!pre.Safe && batch > 512) { batch = 512; adjusted = true; }
-            pre = VramPreflight.Estimate(m, ctx, availableVramBytes, layerFraction, batch);
+            pre = VramPreflight.Estimate(m, ctx, availableVramBytes, layerFraction, batch, kvBytes);
         }
 
         int ngl = AutoLayers;

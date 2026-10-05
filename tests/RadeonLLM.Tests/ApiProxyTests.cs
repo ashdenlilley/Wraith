@@ -1,3 +1,4 @@
+using System.Net.Http;
 using Microsoft.AspNetCore.Hosting;
 using System.Net;
 using System.Net.Http.Headers;
@@ -39,7 +40,9 @@ public class ApiProxyTests : IAsyncLifetime
         b.Logging.ClearProviders();
         b.WebHost.UseUrls($"http://127.0.0.1:{_upPort}");
         _upstream = b.Build();
-        _upstream.MapGet("/v1/models", () => Results.Json(new { data = new[] { new { id = "m" } } }));
+        _upstream.MapGet("/v1/models", (HttpContext c) =>
+            c.Request.Headers.Authorization.ToString() is var a && a.StartsWith("Bearer up-") && a != "Bearer up-good"
+                ? Results.StatusCode(401) : Results.Json(new { data = new[] { new { id = "m" } }, auth = a }));
         _upstream.MapPost("/v1/chat/completions", async (HttpContext ctx) =>
         {
             using var rd = new StreamReader(ctx.Request.Body);
@@ -133,6 +136,18 @@ public class ApiProxyTests : IAsyncLifetime
 
         var good = new HttpRequestMessage(HttpMethod.Get, Url("/v1/models")); good.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "secret-key");
         Assert.Equal(HttpStatusCode.OK, (await _http.SendAsync(good)).StatusCode);
+    }
+
+    [Fact]
+    public async Task ReplacesClientAuthWithUpstreamKey()
+    {
+        await _api.StartAsync(new ApiOptions("127.0.0.1", _apiPort, _upPort, false, null, "up-good"));
+        var req = new HttpRequestMessage(HttpMethod.Get, Url("/v1/models")); req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", "client-key");
+        var resp = await _http.SendAsync(req);
+        Assert.Equal(HttpStatusCode.OK, resp.StatusCode);
+        var body = await resp.Content.ReadAsStringAsync();
+        Assert.Contains("Bearer up-good", body);
+        Assert.DoesNotContain("client-key", body);
     }
 
     [Fact]

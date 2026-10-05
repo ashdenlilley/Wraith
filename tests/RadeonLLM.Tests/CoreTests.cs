@@ -143,6 +143,32 @@ public class PreflightAndConfigTests
     }
 
     [Fact]
+    public void MaximumUsesQuantizedKvAndHalvesKvEstimate()
+    {
+        var m = Qwen14B();
+        var max = ConfigBuilder.Build(new AppSettings { Profile = PerformanceProfile.Maximum }, m, 64L << 30, 16);
+        Assert.Equal("q8_0", max.Config.KvCacheType);
+        var args = max.Config.ToArgs().ToList();
+        Assert.Equal("q8_0", args[args.IndexOf("-ctk") + 1]);
+        Assert.Equal("q8_0", args[args.IndexOf("-ctv") + 1]);
+        var f16 = VramPreflight.Estimate(m, 32768, long.MaxValue, kvBytesPerElement: 2.0).KvCacheBytes;
+        Assert.True(max.Preflight.KvCacheBytes < f16 * 0.6);
+        // q8_0 needs flash attention: Custom without FA falls back to f16
+        var custom = ConfigBuilder.Build(new AppSettings { Profile = PerformanceProfile.Custom, FlashAttention = false, KvCacheType = "q8_0" }, m, 64L << 30, 16);
+        Assert.Equal("f16", custom.Config.KvCacheType);
+    }
+
+    [Fact]
+    public void ApiKeyAndDeviceArgsAreEmitted()
+    {
+        var plan = ConfigBuilder.Build(new AppSettings(), Qwen14B(), 15L << 30, 16, false, "Vulkan0");
+        var a = (plan.Config with { ApiKey = "k123" }).ToArgs().ToList();
+        Assert.Equal("Vulkan0", a[a.IndexOf("--device") + 1]);
+        Assert.Equal("none", a[a.IndexOf("-sm") + 1]);
+        Assert.Equal("k123", a[a.IndexOf("--api-key") + 1]);
+    }
+
+    [Fact]
     public void SafeModeIsConservative()
     {
         var plan = ConfigBuilder.Build(new AppSettings { Profile = PerformanceProfile.Maximum }, Qwen14B(), 15L << 30, 16, safeMode: true);
@@ -207,6 +233,17 @@ public class MiscTests
         var b = new SettingsStore(paths); b.Load();
         Assert.Equal(9999, b.Current.Port); Assert.Equal(PerformanceProfile.Maximum, b.Current.Profile);
     }
+
+    [Fact]
+    public void CatalogEntriesAllResolveToGgufUrls()
+    {
+        Assert.NotEmpty(ModelCatalog.Entries);
+        foreach (var e in ModelCatalog.Entries)
+            Assert.EndsWith(".gguf", ModelDownloader.ResolveUrl(e.Source).AbsolutePath);
+    }
+
+    [Fact]
+    public void InternalPortDefaultsToRandom() => Assert.Equal(0, new AppSettings().InternalPort);
 
     [Fact]
     public void HuggingFaceShorthandResolves()

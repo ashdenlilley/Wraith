@@ -100,7 +100,7 @@ public sealed class LlamaServerManager : IServerStatus, IDisposable
         _startCts.CancelAfter(TimeSpan.FromMinutes(5));
         try
         {
-            await WaitHealthyAsync(p, cfg.Port, _startCts.Token);
+            await WaitHealthyAsync(p, cfg.Port, cfg.ApiKey, _startCts.Token);
         }
         catch (Exception ex)
         {
@@ -114,7 +114,7 @@ public sealed class LlamaServerManager : IServerStatus, IDisposable
         Ready?.Invoke();
     }
 
-    async Task WaitHealthyAsync(Process p, int port, CancellationToken ct)
+    async Task WaitHealthyAsync(Process p, int port, string? apiKey, CancellationToken ct)
     {
         var url = $"http://127.0.0.1:{port}/v1/models";
         while (true)
@@ -123,7 +123,9 @@ public sealed class LlamaServerManager : IServerStatus, IDisposable
             if (p.HasExited) throw new InvalidOperationException($"llama-server exited during startup (code {p.ExitCode}).");
             try
             {
-                using var r = await _http.GetAsync(url, ct);
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                if (apiKey is not null) req.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", apiKey);
+                using var r = await _http.SendAsync(req, ct);
                 if (r.IsSuccessStatusCode) return;
             }
             catch (HttpRequestException) { }
