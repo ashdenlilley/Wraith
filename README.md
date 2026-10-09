@@ -9,7 +9,7 @@ manages a pinned llama.cpp Vulkan `llama-server.exe` and exposes an OpenAI-compa
 
 ```powershell
 dotnet build                                  # all projects
-dotnet test tests/Wraith.Tests             # 52 tests (unit, API proxy, backend selection, WPF smoke)
+dotnet test tests/Wraith.Tests             # unit, API proxy, backend selection, WPF smoke
 dotnet publish src/Wraith.App -c Release -o publish   # self-contained single-file publish/Wraith.exe
 ```
 
